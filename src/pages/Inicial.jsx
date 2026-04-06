@@ -247,6 +247,52 @@ export default function Inicial() {
                                 <i className="fas fa-clock text-sm"></i>
                             </button>
                         </div>
+
+                        {/* */}
+                        <div className="group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-10 border border-slate-200 dark:border-slate-800 hover:border-pink-300 dark:hover:border-pink-500 hover:shadow-2xl hover:shadow-pink-900/5 dark:hover:shadow-pink-900/20 transition-all duration-300 relative overflow-hidden">
+                            {/* Efeito visual no canto superior */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-100 dark:bg-pink-900/20 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+
+                            {/* Ícone */}
+                            <div className="w-16 h-16 bg-pink-600 text-white rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg shadow-pink-200 dark:shadow-pink-900/40">
+                                <i className="fas fa-cake-candles"></i>
+                            </div>
+
+                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
+                                DoceApp Confeitaria
+                            </h3>
+
+                            <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
+                                O sistema ideal para confeiteiras e docerias
+                                artesanais. Acabe com a confusão no WhatsApp com
+                                um catálogo digital inteligente, quadro de
+                                produção visual e fluxo de caixa.
+                            </p>
+
+                            <ul className="space-y-3 mb-8 relative z-10">
+                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
+                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
+                                    Catálogo Direto no WhatsApp
+                                </li>
+                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
+                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
+                                    Quadro Kanban de Produção
+                                </li>
+                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
+                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
+                                    Controle de Sinais (50% Pago)
+                                </li>
+                            </ul>
+
+                            {/* Link apontando direto para a rota que criamos para teste */}
+                            <a
+                                href="/crisdoces"
+                                className="inline-flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold hover:text-pink-800 dark:hover:text-pink-300 transition-colors relative z-10"
+                            >
+                                Ver Demonstração{" "}
+                                <i className="fas fa-arrow-right text-sm"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </section>

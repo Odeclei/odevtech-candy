@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Catalogo from "./pages/Catalogo";
 import Inicial from "./pages/Inicial";
+import PainelAdmin from "./pages/PainelAdmin";
 
 export default function App() {
     return (
@@ -20,6 +21,8 @@ export default function App() {
             Pode ser /crisdoces, /joaobolos, etc. O React vai guardar isso pra gente.
         */}
                 <Route path="/:nomeDaLoja" element={<Catalogo />} />
+
+                <Route path="/admin/:nomeDaLoja" element={<PainelAdmin />} />
             </Routes>
         </BrowserRouter>
     );

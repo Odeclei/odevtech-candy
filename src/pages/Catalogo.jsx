@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { ShoppingCart, Plus, Minus, X } from "lucide-react";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function Catalogo() {
     // 1. Pescando o nome da loja da URL!
@@ -43,18 +45,24 @@ export default function Catalogo() {
             nome: "Bolo de Morango com Ninho",
             preco: 75.0,
             descricao: "Massa branca, recheio duplo",
+            imagem: "https://placehold.jp/3d4070/ffffff/150x150.png", // Imagem padrão se vazio
+            ativo: true,
         },
         {
             id: "2",
             nome: "Cento de Brigadeiro",
             preco: 80.0,
             descricao: "Cacau 50% e granulado belga",
+            imagem: "https://placehold.jp/3d4070/ffffff/150x150.png", // Imagem padrão se vazio
+            ativo: true,
         },
         {
             id: "3",
             nome: "Torta de Limão",
             preco: 95.0,
             descricao: "Massa amanteigada e merengue",
+            imagem: "https://placehold.jp/3d4070/ffffff/150x150.png", // Imagem padrão se vazio
+            ativo: true,
         },
     ];
 
@@ -108,10 +116,31 @@ export default function Catalogo() {
         return `${dia}/${mes}/${ano} ${hora}`;
     };
 
-    const enviarWhatsApp = () => {
+    const enviarWhatsApp = async () => {
         if (!nomeCliente) {
             alert("Por favor, preencha o seu nome para entregar o peedido");
             return;
+        }
+
+        try {
+            const pedidoParaBanco = {
+                loja: nomeDaLoja,
+                cliente: nomeCliente,
+                telefone: "",
+                dataEntrega: dataEntrega,
+                itens: carrinho,
+                valorTotal: valorTotal,
+                status: "pendente",
+                criadoEm: new Date().toISOString(),
+            };
+
+            const pedidosGaveta = collection(db, "pedidos");
+
+            await addDoc(pedidosGaveta, pedidoParaBanco);
+
+            console.log("Pedido enviado com sucesso!");
+        } catch (erro) {
+            console.log("erro ao salvar no banco", erro);
         }
 
         let msg = `*Novo Pedido - Loja ${nomeDaLoja}*\n\n`;
@@ -141,44 +170,62 @@ export default function Catalogo() {
     return (
         <div className="min-h-screen bg-pink-50 p-4 md:p-8 text-slate-800 font-sans pb-32">
             {/* Cabeçalho */}
-            <div className="max-w-4xl mx-auto text-center mb-10 mt-6">
-                <h1 className="text-4xl font-bold text-slate-900 mb-2">
-                    Cardápio
-                </h1>
-                <p className="text-slate-500 uppercase tracking-widest text-sm">
-                    Loja: {nomeDaLoja}
-                </p>
+            <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center mb-10 mt-6 gap-4">
+                <div className="text-center md:text-left">
+                    <h1 className="text-4xl font-bold text-slate-900 mb-2">
+                        Cardápio
+                    </h1>
+                    <p className="text-slate-500 uppercase tracking-widest text-sm">
+                        Loja: {nomeDaLoja}
+                    </p>
+                </div>
+
+                <Link
+                    to={`/admin/${nomeDaLoja}`}
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-md flex items-center gap-2"
+                >
+                    Acessar Painel
+                </Link>
             </div>
 
             {/* Lista de Produtos (Grid) */}
             <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Usamos o .map() para desenhar um "Card" para cada produto na lista */}
-                {produtosDaLoja.map((produto) => (
-                    <div
-                        key={produto.id}
-                        className="bg-white p-6 rounded-3xl shadow-sm border border-pink-100 flex flex-col justify-between hover:shadow-md transition-shadow"
-                    >
-                        <div className="mb-4">
-                            <h3 className="font-bold text-xl text-slate-800">
-                                {produto.nome}
-                            </h3>
-                            <p className="text-slate-500 text-sm mt-1">
-                                {produto.descricao}
-                            </p>
+                {produtosDaLoja
+                    .filter((p) => p.ativo)
+                    .map((produto) => (
+                        <div
+                            key={produto.id}
+                            className="bg-white p-6 rounded-3xl shadow-sm border border-pink-100 flex flex-col justify-between hover:shadow-md transition-shadow"
+                        >
+                            <div>
+                                <img
+                                    src={produto.imagem}
+                                    alt={produto.nome}
+                                    className="w-full rounded-2xl"
+                                />
+                            </div>
+                            <div className="mb-4">
+                                <h3 className="font-bold text-xl text-slate-800">
+                                    {produto.nome}
+                                </h3>
+                                <p className="text-slate-500 text-sm mt-1">
+                                    {produto.descricao}
+                                </p>
+                            </div>
+                            <div className="flex justify-between items-end mt-4 border-t border-slate-50 pt-4">
+                                <span className="font-black text-pink-600 text-xl">
+                                    {formatarDinheiro(produto.preco)}
+                                </span>
+                                <button
+                                    onClick={() => adicionarAoCarrinho(produto)}
+                                    className="bg-pink-100 text-pink-700 hover:bg-pink-600 hover:text-white p-3 rounded-2xl font-bold transition-colors flex items-center gap-2"
+                                >
+                                    <Plus size={20} /> Adicionar
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex justify-between items-end mt-4 border-t border-slate-50 pt-4">
-                            <span className="font-black text-pink-600 text-xl">
-                                {formatarDinheiro(produto.preco)}
-                            </span>
-                            <button
-                                onClick={() => adicionarAoCarrinho(produto)}
-                                className="bg-pink-100 text-pink-700 hover:bg-pink-600 hover:text-white p-3 rounded-2xl font-bold transition-colors flex items-center gap-2"
-                            >
-                                <Plus size={20} /> Adicionar
-                            </button>
-                        </div>
-                    </div>
-                ))}
+                    ))}
             </div>
 
             {/* IF DO REACT: Essa div inteira do Carrinho SÓ APARECE se tiver itens na "memória" (carrinho.length > 0)
