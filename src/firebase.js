@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // Aqui o React vai puxar as senhas lá do arquivo .env com segurança
 const firebaseConfig = {
@@ -16,3 +17,4 @@ const app = initializeApp(firebaseConfig);
 
 // 2. Inicializa o Banco de Dados (Firestore)
 export const db = getFirestore(app);
+export const auth = getAuth(app);
