@@ -26,7 +26,8 @@ import SuperAdmin from "./pages/SuperAdmin";
 
 // O SUPER SEGURANÇA!
 const RotaProtegida = ({ children }) => {
-    const { nomeDaLoja } = useParams();
+    const params = useParams();
+    const nomeDaLoja = params.nomeDaLoja?.toLowerCase();
     const [carregando, setCarregando] = useState(true);
     const [autorizado, setAutorizado] = useState(false);
 
@@ -125,9 +126,19 @@ export default function App() {
     return (
         <BrowserRouter>
             <Routes>
+                {/* 1. PORTA DE ENTRADA: Site Institucional da OdevTech */}
                 <Route path="/" element={<Inicial />} />
+
+                {/* 2. CATÁLOGO DO CLIENTE: odevtech.com.br/crisdoces */}
                 <Route path="/:nomeDaLoja" element={<Catalogo />} />
+
+                {/* 3. LOGIN: odevtech.com.br/login/crisdoces */}
                 <Route path="/login/:nomeDaLoja" element={<Login />} />
+
+                {/* Rota para um Login Geral (opcional para o Portal do Cliente) */}
+                <Route path="/login" element={<Login />} />
+
+                {/* 4. SUPER ADMIN DA ODEVTECH */}
                 <Route
                     path="/superadmin"
                     element={
@@ -137,7 +148,7 @@ export default function App() {
                     }
                 />
 
-                {/* ROTA BLINDADA */}
+                {/* 5. PAINEL DO DONO DA LOJA */}
                 <Route
                     path="/admin/:nomeDaLoja"
                     element={

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom"; // Adiciona este import
 import { useParams } from "react-router-dom";
 
 export default function Inicial() {
@@ -82,12 +83,13 @@ export default function Inicial() {
                                 )}
                             </button>
 
-                            <a
-                                href="https://app.odevtech.com.br"
-                                className="bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-all shadow-md"
+                            <Link
+                                to="/crisdoces"
+                                className="inline-flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold hover:text-pink-800 dark:hover:text-pink-300 transition-colors relative z-10"
                             >
-                                Portal do Cliente
-                            </a>
+                                Ver Demonstração{" "}
+                                <i className="fas fa-arrow-right text-sm"></i>
+                            </Link>
                         </div>
 
                         {/* <!-- Menu Mobile (Sanduíche e Tema) --> */}

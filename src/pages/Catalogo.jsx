@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ShoppingCart, Plus, Minus, X, Phone, ShoppingBag } from "lucide-react";
+import {
+    ShoppingCart,
+    Plus,
+    Minus,
+    X,
+    Phone,
+    ShoppingBag,
+    Lock,
+    Store,
+} from "lucide-react";
 import {
     collection,
     addDoc,
@@ -37,6 +46,18 @@ export default function Catalogo() {
         };
         carregarConfig();
     }, [nomeDaLoja]);
+
+    useEffect(() => {
+        if (configLoja?.logo) {
+            const link =
+                document.querySelector("link[rel*='icon']") ||
+                document.createElement("link");
+            link.type = "image/x-icon";
+            link.rel = "shortcut icon";
+            link.href = configLoja.logo;
+            document.getElementsByTagName("head")[0].appendChild(link);
+        }
+    }, [configLoja]);
 
     useEffect(() => {
         const q = query(
@@ -152,12 +173,33 @@ export default function Catalogo() {
                 </p>
             </div>
         );
-    if (!configLoja)
+    if (
+        !configLoja ||
+        Object.keys(configLoja).length === 0 ||
+        !configLoja.nomeExibicao
+    ) {
         return (
-            <h2 className="text-center mt-20 text-xl text-slate-500 font-bold">
-                Loja não encontrada.
-            </h2>
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
+                <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                    <Store size={48} className="text-slate-400" />
+                </div>
+                <h1 className="text-6xl font-black text-slate-300 mb-2 tracking-tighter">
+                    404
+                </h1>
+                <h2 className="text-2xl font-bold text-slate-700 mb-4">
+                    Loja não encontrada
+                </h2>
+                <p className="text-slate-500 mb-8 max-w-sm mx-auto">
+                    O endereço que tentou aceder não existe ou a loja está
+                    indisponível no momento.
+                    <br />
+                    <br />
+                    Verifique se digitou o link corretamente na barra de
+                    endereço.
+                </p>
+            </div>
         );
+    }
 
     const categoriasPresentes = [
         ...new Set(produtosDaLoja.map((p) => p.categoria || "Outros")),
@@ -168,7 +210,8 @@ export default function Catalogo() {
         <div className="min-h-screen bg-pink-50 text-slate-800 pb-32 relative">
             {/* Cabeçalho e Capa */}
             <div className="bg-white border-b border-pink-100 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-7xl mx-auto p-4 md:p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="max-w-7xl mx-auto p-4 md:p-6 flex flex-row justify-between items-center gap-4">
+                    {/* Lado Esquerdo: Logo e Nome */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         {configLoja.logo ? (
                             <img
@@ -190,8 +233,19 @@ export default function Catalogo() {
                             </p>
                         </div>
                     </div>
-                </div>
 
+                    {/* Lado Direito: Botão Discreto de Login para a Cris */}
+                    <Link
+                        to={`/login/${nomeDaLoja}`}
+                        className="text-xs font-bold text-slate-300 hover:text-pink-600 transition-colors flex flex-col items-center gap-1"
+                        title="Acesso Restrito ao Painel"
+                    >
+                        <Lock size={18} />
+                        <span className="hidden md:block text-[10px] uppercase tracking-widest">
+                            Painel
+                        </span>
+                    </Link>
+                </div>
                 {/* Menu Deslizante de Categorias */}
                 <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex gap-3 overflow-x-auto snap-x no-scrollbar">
                     {categoriasPresentes.map((cat) => (

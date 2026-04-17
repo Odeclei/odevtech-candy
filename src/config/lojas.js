@@ -2,25 +2,28 @@
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-// Cache simples para não ficar consultando toda hora
+// Cache simples para não consultar o banco repetidamente na mesma sessão
 const cacheLojas = new Map();
 
 export const getLojaConfig = async (nomeDaLoja) => {
     if (!nomeDaLoja) return null;
 
-    // Retorna do cache se já tiver
-    if (cacheLojas.has(nomeDaLoja)) {
-        return cacheLojas.get(nomeDaLoja);
+    // Converte para minúsculas para evitar erros de digitação (ex: CrisDoces vs crisdoces)
+    const nomeBusca = nomeDaLoja.toLowerCase();
+
+    // Retorna do cache se já tiver pesquisado esta loja antes
+    if (cacheLojas.has(nomeBusca)) {
+        return cacheLojas.get(nomeBusca);
     }
 
     try {
-        const lojaRef = doc(db, "lojas", nomeDaLoja);
+        const lojaRef = doc(db, "lojas", nomeBusca);
         const snapshot = await getDoc(lojaRef);
 
         if (snapshot.exists()) {
             const dados = snapshot.data();
             const config = {
-                nomeExibicao: dados.nomeExibicao || nomeDaLoja,
+                nomeExibicao: dados.nomeExibicao || nomeBusca,
                 corPrincipal: dados.corPrincipal || "pink",
                 logo: dados.logo || null,
                 whatsapp: dados.whatsapp || "",
@@ -31,19 +34,12 @@ export const getLojaConfig = async (nomeDaLoja) => {
                 ativo: dados.ativo !== false,
             };
 
-            cacheLojas.set(nomeDaLoja, config);
+            cacheLojas.set(nomeBusca, config);
             return config;
         } else {
-            // Fallback para lojas antigas ou teste
-            const fallback = {
-                nomeExibicao:
-                    nomeDaLoja.charAt(0).toUpperCase() + nomeDaLoja.slice(1),
-                corPrincipal: "pink",
-                logo: null,
-                whatsapp: "5547999545703",
-            };
-            cacheLojas.set(nomeDaLoja, fallback);
-            return fallback;
+            // CORREÇÃO: Se não existe no Firestore, retornamos null.
+            // Isso permite que o Catalogo.jsx exiba o ecrã de Erro 404.
+            return null;
         }
     } catch (error) {
         console.error("Erro ao buscar config da loja:", error);
@@ -51,5 +47,5 @@ export const getLojaConfig = async (nomeDaLoja) => {
     }
 };
 
-// Função para limpar cache (útil em dev)
+// Função para limpar cache (útil em desenvolvimento ou após logout)
 export const limparCacheLojas = () => cacheLojas.clear();

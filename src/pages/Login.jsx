@@ -5,17 +5,19 @@ import {
     signInWithEmailAndPassword,
     GoogleAuthProvider,
     signInWithPopup,
+    sendPasswordResetEmail, // IMPORTAÇÃO ADICIONADA AQUI
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { Lock, Mail } from "lucide-react";
 
 export default function Login() {
-    const { nomeDaLoja } = useParams();
+    const { nomeDaLoja } = useParams() || "";
     const navigate = useNavigate();
 
     const [email, setEmail] = useState("");
     const [senha, setSenha] = useState("");
     const [erro, setErro] = useState("");
+    const [sucesso, setSucesso] = useState(""); // NOVO ESTADO PARA MENSAGEM DE SUCESSO
     const [carregando, setCarregando] = useState(false);
 
     // FUNÇÃO 1: Login Tradicional (E-mail e Senha)
@@ -23,6 +25,7 @@ export default function Login() {
         e.preventDefault();
         setCarregando(true);
         setErro("");
+        setSucesso("");
 
         try {
             await signInWithEmailAndPassword(auth, email, senha);
@@ -39,6 +42,7 @@ export default function Login() {
     const fazerLoginGoogle = async () => {
         setCarregando(true);
         setErro("");
+        setSucesso("");
         const provider = new GoogleAuthProvider();
 
         try {
@@ -47,6 +51,35 @@ export default function Login() {
         } catch (error) {
             console.error("Erro no login com Google:", error);
             setErro("Acesso com Google cancelado ou falhou.");
+        } finally {
+            setCarregando(false);
+        }
+    };
+
+    // FUNÇÃO 3: Recuperar Senha (NOVA)
+    const recuperarSenha = async () => {
+        if (!email) {
+            setErro(
+                "Por favor, digite o seu e-mail no campo acima para recuperar a senha.",
+            );
+            setSucesso("");
+            return;
+        }
+
+        setCarregando(true);
+        setErro("");
+        setSucesso("");
+
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setSucesso(
+                "E-mail de recuperação enviado! Verifique a sua caixa de entrada (e o Spam).",
+            );
+        } catch (error) {
+            console.error("Erro ao recuperar senha:", error);
+            setErro(
+                "Erro ao enviar e-mail. Verifique se o endereço está registado corretamente.",
+            );
         } finally {
             setCarregando(false);
         }
@@ -69,9 +102,17 @@ export default function Login() {
                     </span>
                 </p>
 
+                {/* MENSAGEM DE ERRO */}
                 {erro && (
                     <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm font-bold border border-red-100">
                         {erro}
+                    </div>
+                )}
+
+                {/* MENSAGEM DE SUCESSO (Recuperação de Senha) */}
+                {sucesso && (
+                    <div className="bg-emerald-50 text-emerald-600 p-4 rounded-xl mb-6 text-sm font-bold border border-emerald-100">
+                        {sucesso}
                     </div>
                 )}
 
@@ -96,7 +137,7 @@ export default function Login() {
                         </div>
                     </div>
 
-                    <div className="text-left pb-4">
+                    <div className="text-left">
                         <label className="block text-sm font-medium text-slate-600 mb-1">
                             Palavra-passe
                         </label>
@@ -107,7 +148,6 @@ export default function Login() {
                             />
                             <input
                                 type="password"
-                                required
                                 value={senha}
                                 onChange={(e) => setSenha(e.target.value)}
                                 className="w-full pl-12 pr-4 py-4 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
@@ -116,14 +156,24 @@ export default function Login() {
                         </div>
                     </div>
 
+                    {/* BOTÃO ESQUECI A PALAVRA-PASSE */}
+                    <div className="flex justify-end mt-1 mb-4">
+                        <button
+                            type="button"
+                            onClick={recuperarSenha}
+                            disabled={carregando}
+                            className="text-xs text-slate-500 hover:text-pink-600 font-medium transition-colors"
+                        >
+                            Esqueci a palavra-passe
+                        </button>
+                    </div>
+
                     <button
                         type="submit"
                         disabled={carregando}
                         className={`w-full py-4 rounded-2xl font-bold text-lg text-white transition-all shadow-lg ${carregando ? "bg-slate-400 cursor-not-allowed" : "bg-slate-900 hover:bg-pink-600 shadow-slate-200"}`}
                     >
-                        {carregando
-                            ? "A validar acesso..."
-                            : "Entrar no Painel"}
+                        {carregando ? "A aguardar..." : "Entrar no Painel"}
                     </button>
                 </form>
 
