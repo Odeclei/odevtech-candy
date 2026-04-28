@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Plus,
     Edit,
@@ -6,6 +6,8 @@ import {
     Trash2,
     ShoppingBag,
     Image as ImageIcon,
+    TrendingUp,
+    Lock,
 } from "lucide-react";
 import {
     doc,
@@ -13,6 +15,9 @@ import {
     addDoc,
     collection,
     deleteDoc,
+    query,
+    where,
+    onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import imageCompression from "browser-image-compression";
@@ -22,18 +27,82 @@ export default function AbaCardapio({
     produtos,
     formatarDinheiro,
 }) {
-    // Estados locais para o formulário (Movidos do PainelAdmin)
+    // ==========================================
+    // ESTADOS
+    // ==========================================
     const [editandoProdutoId, setEditandoProdutoId] = useState(null);
     const [produtoImagemAtual, setProdutoImagemAtual] = useState("");
     const [novoNome, setNovoNome] = useState("");
     const [novoPreco, setNovoPreco] = useState("");
+    const [novoCusto, setNovoCusto] = useState(""); // NOVO ESTADO: Custo
     const [novaDescricao, setNovaDescricao] = useState("");
-    const [novaCategoria, setNovaCategoria] = useState("Doces Tradicionais");
-    const [novoNcm, setNovoNcm] = useState(""); // Campo fiscal
+    const [novaCategoria, setNovaCategoria] = useState("");
+    const [novoNcm, setNovoNcm] = useState("");
     const [imagemArquivo, setImagemArquivo] = useState(null);
     const [salvandoProduto, setSalvandoProduto] = useState(false);
     const [novoAtivo, setNovoAtivo] = useState(true);
 
+    const [categoriasDaLoja, setCategoriasDaLoja] = useState([]);
+
+    // Verifica se o produto a ser editado tem o custo bloqueado pelo Estoque Automático
+    const produtoSendoEditado = produtos.find(
+        (p) => p.id === editandoProdutoId,
+    );
+    const custoBloqueadoPeloEstoque = produtoSendoEditado?.controlarEstoque;
+
+    // ==========================================
+    // BUSCAR CATEGORIAS DINÂMICAS
+    // ==========================================
+    useEffect(() => {
+        const q = query(
+            collection(db, "categorias"),
+            where("loja", "==", nomeDaLoja),
+        );
+        return onSnapshot(q, (snapshot) => {
+            const cats = snapshot.docs.map((doc) => doc.data().nome);
+            const listaFinal = cats.length > 0 ? cats : ["Geral"];
+            listaFinal.sort((a, b) => a.localeCompare(b));
+
+            setCategoriasDaLoja(listaFinal);
+
+            if (!novaCategoria) {
+                setNovaCategoria(listaFinal[0]);
+            }
+        });
+    }, [nomeDaLoja, novaCategoria]);
+
+    // ==========================================
+    // CRIAR NOVA CATEGORIA PELO SELECT
+    // ==========================================
+    const handleCategoriaChange = async (e) => {
+        const valorSelecionado = e.target.value;
+
+        if (valorSelecionado === "NOVA_CATEGORIA") {
+            const novaCat = window.prompt("Digite o nome da nova categoria:");
+
+            if (novaCat && novaCat.trim() !== "") {
+                const nomeFormatado = novaCat.trim();
+                try {
+                    await addDoc(collection(db, "categorias"), {
+                        loja: nomeDaLoja,
+                        nome: nomeFormatado,
+                    });
+                    setNovaCategoria(nomeFormatado);
+                } catch (error) {
+                    console.error("Erro:", error);
+                    alert("Erro ao salvar a nova categoria.");
+                }
+            } else {
+                setNovaCategoria(categoriasDaLoja[0]);
+            }
+        } else {
+            setNovaCategoria(valorSelecionado);
+        }
+    };
+
+    // ==========================================
+    // FUNÇÕES DO PRODUTO
+    // ==========================================
     const salvarProduto = async (e) => {
         e.preventDefault();
         if (!novoNome || !novoPreco) return alert("Preencha nome e preço");
@@ -64,12 +133,17 @@ export default function AbaCardapio({
                 nome: novoNome,
                 preco: parseFloat(novoPreco),
                 descricao: novaDescricao,
-                categoria: novaCategoria || "Outros",
+                categoria: novaCategoria || categoriasDaLoja[0],
                 ncm: novoNcm,
                 imagem: urlDaFoto,
                 ativo: novoAtivo,
                 atualizadoEm: new Date().toISOString(),
             };
+
+            // Se NÃO estiver bloqueado pelo estoque automático, atualiza o custo médio manual
+            if (!custoBloqueadoPeloEstoque) {
+                dadosProduto.custoMedio = parseFloat(novoCusto) || 0;
+            }
 
             if (editandoProdutoId) {
                 await updateDoc(
@@ -78,6 +152,9 @@ export default function AbaCardapio({
                 );
                 alert("Produto atualizado!");
             } else {
+                // Produto novo nasce com esses campos extras
+                dadosProduto.controlarEstoque = false;
+                dadosProduto.estoqueAtual = 0;
                 await addDoc(collection(db, "produtos"), dadosProduto);
                 alert("Produto criado!");
             }
@@ -95,8 +172,15 @@ export default function AbaCardapio({
         setEditandoProdutoId(produto.id);
         setNovoNome(produto.nome);
         setNovoPreco(produto.preco);
+        setNovoCusto(produto.custoMedio || ""); // Carrega o custo atual
         setNovaDescricao(produto.descricao);
-        setNovaCategoria(produto.categoria || "Doces Tradicionais");
+
+        setNovaCategoria(
+            categoriasDaLoja.includes(produto.categoria)
+                ? produto.categoria
+                : categoriasDaLoja[0],
+        );
+
         setNovoNcm(produto.ncm || "");
         setNovoAtivo(produto.ativo);
         setProdutoImagemAtual(produto.imagem);
@@ -107,8 +191,9 @@ export default function AbaCardapio({
         setEditandoProdutoId(null);
         setNovoNome("");
         setNovoPreco("");
+        setNovoCusto("");
         setNovaDescricao("");
-        setNovaCategoria("Doces Tradicionais");
+        setNovaCategoria(categoriasDaLoja[0] || "");
         setNovoNcm("");
         setNovoAtivo(true);
         setImagemArquivo(null);
@@ -116,7 +201,7 @@ export default function AbaCardapio({
     };
 
     const apagarProduto = async (id) => {
-        if (window.confirm("Deseja mesmo apagar este doce?"))
+        if (window.confirm("Deseja mesmo apagar este produto?"))
             await deleteDoc(doc(db, "produtos", id));
     };
 
@@ -125,7 +210,7 @@ export default function AbaCardapio({
 
     return (
         <div className="animate-in fade-in duration-300 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Formulário Novo/Editar Doce */}
+            {/* Formulário Novo/Editar Produto */}
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
                 <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-2">
                     {editandoProdutoId ? (
@@ -142,20 +227,21 @@ export default function AbaCardapio({
                         </label>
                         <select
                             value={novaCategoria}
-                            onChange={(e) => setNovaCategoria(e.target.value)}
-                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none bg-white"
+                            onChange={handleCategoriaChange}
+                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none bg-white text-slate-900"
                         >
-                            <option value="Bolos">Bolos</option>
-                            <option value="Doces Tradicionais">
-                                Doces Tradicionais
+                            {categoriasDaLoja.map((cat) => (
+                                <option key={cat} value={cat}>
+                                    {cat}
+                                </option>
+                            ))}
+                            <option disabled>──────────</option>
+                            <option
+                                value="NOVA_CATEGORIA"
+                                className="font-bold text-pink-600"
+                            >
+                                ➕ Adicionar nova categoria...
                             </option>
-                            <option value="Doces Finos">Doces Finos</option>
-                            <option value="Gelados">Gelados</option>
-                            <option value="Salgados">Salgados</option>
-                            <option value="Salgadinhos">Salgadinhos</option>
-                            <option value="Kits Festa">Kits Festa</option>
-                            <option value="Bebidas">Bebidas</option>
-                            <option value="Outros">Outros</option>
                         </select>
                     </div>
                     <div>
@@ -167,22 +253,67 @@ export default function AbaCardapio({
                             required
                             value={novoNome}
                             onChange={(e) => setNovoNome(e.target.value)}
-                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
+                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
                         />
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">
+                                Preço Final (R$)
+                            </label>
+                            <input
+                                type="number"
+                                required
+                                step="0.01"
+                                value={novoPreco}
+                                onChange={(e) => setNovoPreco(e.target.value)}
+                                className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none font-bold text-slate-800"
+                            />
+                        </div>
+
+                        <div className="relative">
+                            <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center justify-between">
+                                Custo (R$)
+                                {custoBloqueadoPeloEstoque && (
+                                    <Lock
+                                        size={12}
+                                        className="text-amber-500"
+                                        title="Calculado via Estoque Automático"
+                                    />
+                                )}
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                disabled={custoBloqueadoPeloEstoque}
+                                value={novoCusto}
+                                onChange={(e) => setNovoCusto(e.target.value)}
+                                placeholder="0.00"
+                                className={`w-full border p-3 rounded-xl outline-none font-bold transition-colors ${custoBloqueadoPeloEstoque ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed" : "bg-white border-slate-200 focus:ring-2 focus:ring-pink-400 text-slate-900"}`}
+                            />
+                        </div>
+                    </div>
+
                     <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">
-                            Preço (R$)
+                        <label
+                            className="block text-sm font-medium text-slate-600 mb-1"
+                            title="Nomenclatura Comum do Mercosul"
+                        >
+                            NCM (Fiscal)
                         </label>
                         <input
-                            type="number"
-                            required
-                            step="0.01"
-                            value={novoPreco}
-                            onChange={(e) => setNovoPreco(e.target.value)}
-                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
+                            type="text"
+                            maxLength="8"
+                            value={novoNcm}
+                            onChange={(e) =>
+                                setNovoNcm(e.target.value.replace(/\D/g, ""))
+                            }
+                            placeholder="Ex: 19059090"
+                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
                         />
                     </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1 flex justify-between">
                             <span>Foto Principal</span>
@@ -199,7 +330,7 @@ export default function AbaCardapio({
                                 onChange={(e) =>
                                     setImagemArquivo(e.target.files[0])
                                 }
-                                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-pink-100 file:text-pink-700 hover:file:bg-pink-200 cursor-pointer"
+                                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-pink-100 file:text-pink-700 hover:file:bg-pink-200 cursor-pointer text-slate-700"
                             />
                         </div>
                     </div>
@@ -210,7 +341,7 @@ export default function AbaCardapio({
                         <textarea
                             value={novaDescricao}
                             onChange={(e) => setNovaDescricao(e.target.value)}
-                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
+                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
                             rows="3"
                         ></textarea>
                     </div>
@@ -253,7 +384,7 @@ export default function AbaCardapio({
                 </form>
             </div>
 
-            {/* Lista de Produtos (Agrupada por Categoria visualmente ou apenas listada) */}
+            {/* Lista de Produtos */}
             <div className="lg:col-span-2 space-y-4">
                 {produtos.length === 0 ? (
                     <div className="bg-white p-12 rounded-3xl text-center border border-slate-100">
@@ -265,72 +396,142 @@ export default function AbaCardapio({
                             Nenhum produto cadastrado
                         </h3>
                         <p className="text-slate-400 mt-2">
-                            Comece a adicionar os doces da loja.
+                            Comece a adicionar os produtos da loja.
                         </p>
                     </div>
                 ) : (
-                    // Ordena por categoria para ficar mais bonito na lista
                     produtos
                         .sort((a, b) =>
                             (a.categoria || "").localeCompare(
                                 b.categoria || "",
                             ),
                         )
-                        .map((p) => (
-                            <div
-                                key={p.id}
-                                className={`bg-white p-5 rounded-2xl border flex items-center gap-5 transition-all ${p.ativo ? "border-slate-100 shadow-sm" : "border-red-100 opacity-60 grayscale-[30%]"}`}
-                            >
-                                <img
-                                    src={p.imagem}
-                                    alt={p.nome}
-                                    className="w-24 h-24 rounded-2xl object-cover bg-slate-100"
-                                />
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <span className="text-xs px-2.5 py-1 rounded-md font-bold uppercase bg-slate-100 text-slate-600">
-                                            {p.categoria || "Geral"}
-                                        </span>
-                                        <span
-                                            className={`text-[10px] px-2.5 py-1 rounded-md font-bold uppercase ${p.ativo ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
-                                        >
-                                            {p.ativo ? "Ativo" : "Pausado"}
-                                        </span>
+                        .map((p) => {
+                            // CÁLCULO FINANCEIRO DO PRODUTO
+                            const custo = p.custoMedio || 0;
+                            const lucroBruto = p.preco - custo;
+                            const margem =
+                                p.preco > 0
+                                    ? ((lucroBruto / p.preco) * 100).toFixed(1)
+                                    : 0;
+
+                            return (
+                                <div
+                                    key={p.id}
+                                    className={`bg-white p-5 rounded-2xl border transition-all ${p.ativo ? "border-slate-100 shadow-sm hover:border-pink-200" : "border-red-100 opacity-60 grayscale-[30%]"}`}
+                                >
+                                    <div className="flex flex-col sm:flex-row gap-5 items-start">
+                                        <img
+                                            src={p.imagem}
+                                            alt={p.nome}
+                                            className="w-24 h-24 rounded-2xl object-cover bg-slate-100"
+                                        />
+                                        <div className="flex-1 w-full">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs px-2.5 py-1 rounded-md font-bold uppercase bg-slate-100 text-slate-600">
+                                                        {p.categoria || "Geral"}
+                                                    </span>
+                                                    <span
+                                                        className={`text-[10px] px-2.5 py-1 rounded-md font-bold uppercase ${p.ativo ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
+                                                    >
+                                                        {p.ativo
+                                                            ? "Ativo"
+                                                            : "Pausado"}
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() =>
+                                                            prepararEdicaoProduto(
+                                                                p,
+                                                            )
+                                                        }
+                                                        className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                                                        title="Editar"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() =>
+                                                            alternarStatus(
+                                                                p.id,
+                                                                p.ativo,
+                                                            )
+                                                        }
+                                                        className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition"
+                                                        title={
+                                                            p.ativo
+                                                                ? "Pausar"
+                                                                : "Ativar"
+                                                        }
+                                                    >
+                                                        <Lock size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() =>
+                                                            apagarProduto(p.id)
+                                                        }
+                                                        className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition"
+                                                        title="Excluir"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <h4 className="font-bold text-xl text-slate-800 line-clamp-1">
+                                                {p.nome}
+                                            </h4>
+
+                                            {/* MINI-DASHBOARD FINANCEIRO DO PRODUTO */}
+                                            <div className="grid grid-cols-3 gap-2 mt-4 bg-slate-50 rounded-xl border border-slate-200 divide-x divide-slate-200">
+                                                <div className="p-2 text-center">
+                                                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider mb-1">
+                                                        Custo Médio
+                                                    </p>
+                                                    <p className="font-bold text-sm text-slate-700">
+                                                        {formatarDinheiro(
+                                                            custo,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                                <div className="p-2 text-center bg-white">
+                                                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider mb-1">
+                                                        Preço Venda
+                                                    </p>
+                                                    <p className="font-black text-sm text-slate-900">
+                                                        {formatarDinheiro(
+                                                            p.preco,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                                <div
+                                                    className={`p-2 text-center ${margem > 40 ? "bg-emerald-50" : margem > 20 ? "bg-blue-50" : "bg-red-50"}`}
+                                                >
+                                                    <p
+                                                        className={`text-[9px] uppercase font-black tracking-wider mb-1 ${margem > 40 ? "text-emerald-600" : margem > 20 ? "text-blue-600" : "text-red-600"}`}
+                                                    >
+                                                        Lucro ({margem}%)
+                                                    </p>
+                                                    <p
+                                                        className={`font-black text-sm ${margem > 40 ? "text-emerald-700" : margem > 20 ? "text-blue-700" : "text-red-700"}`}
+                                                    >
+                                                        <TrendingUp
+                                                            size={12}
+                                                            className="inline mr-1"
+                                                        />
+                                                        {formatarDinheiro(
+                                                            lucroBruto,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <h4 className="font-bold text-xl text-slate-800">
-                                        {p.nome}
-                                    </h4>
-                                    <p className="text-sm text-slate-500 line-clamp-1 mb-2">
-                                        {p.descricao}
-                                    </p>
-                                    <p className="font-black text-pink-600 text-lg">
-                                        {formatarDinheiro(p.preco)}
-                                    </p>
                                 </div>
-                                <div className="flex flex-col md:flex-row gap-2">
-                                    <button
-                                        onClick={() => prepararEdicaoProduto(p)}
-                                        className="text-sm font-bold px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition flex items-center gap-2"
-                                    >
-                                        <Edit size={16} /> Editar
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            alternarStatus(p.id, p.ativo)
-                                        }
-                                        className="text-sm font-bold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                                    >
-                                        {p.ativo ? "Pausar" : "Ativar"}
-                                    </button>
-                                    <button
-                                        onClick={() => apagarProduto(p.id)}
-                                        className="text-sm font-bold p-2 rounded-xl text-red-500 hover:bg-red-50 flex justify-center transition"
-                                    >
-                                        <Trash2 size={20} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                 )}
             </div>
         </div>

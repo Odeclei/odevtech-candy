@@ -124,40 +124,42 @@ const RotaProtegida = ({ children }) => {
 
 export default function App() {
     return (
-        <BrowserRouter>
-            <Routes>
-                {/* 1. PORTA DE ENTRADA: Site Institucional da OdevTech */}
-                <Route path="/" element={<Inicial />} />
+        <div style={{ colorScheme: "light" }}>
+            <BrowserRouter>
+                <Routes>
+                    {/* 1. PORTA DE ENTRADA: Site Institucional da OdevTech */}
+                    <Route path="/" element={<Inicial />} />
 
-                {/* 2. CATÁLOGO DO CLIENTE: odevtech.com.br/crisdoces */}
-                <Route path="/:nomeDaLoja" element={<Catalogo />} />
+                    {/* 2. CATÁLOGO DO CLIENTE: odevtech.com.br/crisdoces */}
+                    <Route path="/:nomeDaLoja" element={<Catalogo />} />
 
-                {/* 3. LOGIN: odevtech.com.br/login/crisdoces */}
-                <Route path="/login/:nomeDaLoja" element={<Login />} />
+                    {/* 3. LOGIN: odevtech.com.br/login/crisdoces */}
+                    <Route path="/login/:nomeDaLoja" element={<Login />} />
 
-                {/* Rota para um Login Geral (opcional para o Portal do Cliente) */}
-                <Route path="/login" element={<Login />} />
+                    {/* Rota para um Login Geral (opcional para o Portal do Cliente) */}
+                    <Route path="/login" element={<Login />} />
 
-                {/* 4. SUPER ADMIN DA ODEVTECH */}
-                <Route
-                    path="/superadmin"
-                    element={
-                        <RotaProtegida>
-                            <SuperAdmin />
-                        </RotaProtegida>
-                    }
-                />
+                    {/* 4. SUPER ADMIN DA ODEVTECH */}
+                    <Route
+                        path="/superadmin"
+                        element={
+                            <RotaProtegida>
+                                <SuperAdmin />
+                            </RotaProtegida>
+                        }
+                    />
 
-                {/* 5. PAINEL DO DONO DA LOJA */}
-                <Route
-                    path="/admin/:nomeDaLoja"
-                    element={
-                        <RotaProtegida>
-                            <PainelAdmin />
-                        </RotaProtegida>
-                    }
-                />
-            </Routes>
-        </BrowserRouter>
+                    {/* 5. PAINEL DO DONO DA LOJA */}
+                    <Route
+                        path="/admin/:nomeDaLoja"
+                        element={
+                            <RotaProtegida>
+                                <PainelAdmin />
+                            </RotaProtegida>
+                        }
+                    />
+                </Routes>
+            </BrowserRouter>
+        </div>
     );
 }

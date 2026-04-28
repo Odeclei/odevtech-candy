@@ -1,360 +1,268 @@
-import { useState } from "react";
-import {
-    ChevronRight,
-    CheckCircle,
-    FileText,
-    ExternalLink,
-} from "lucide-react";
+import React from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
+import {
+    Clock,
+    ChefHat,
+    Truck,
+    CheckCircle,
+    AlertCircle,
+    Play,
+    Check,
+    MapPin,
+} from "lucide-react";
 
-export default function AbaKanban({
-    pedidos,
-    formatarItensPedido,
-    formatarDinheiro,
-    isHoje,
-}) {
-    // ==========================================
-    // ESTADOS LOCAIS DO KANBAN
-    // ==========================================
-    const [editandoEntregaId, setEditandoEntregaId] = useState(null);
-    const [saldoRecebido, setSaldoRecebido] = useState(false);
-
-    // ==========================================
-    // FUNÇÕES DO KANBAN
-    // ==========================================
-    const mudarStatus = async (id, status) => {
+export default function AbaKanban({ pedidos, isHoje }) {
+    // Atualiza o status do pedido no Firebase em tempo real
+    const atualizarStatus = async (pedidoId, novoStatus) => {
         try {
-            await updateDoc(doc(db, "pedidos", id), { status });
-        } catch (erro) {
-            alert("Erro ao mudar o status do pedido.");
-        }
-    };
-
-    const avisarClientePronto = (pedido) => {
-        mudarStatus(pedido.id, "pronto");
-        if (pedido.telefone) {
-            const msg = `Olá, *${pedido.cliente}*! \n\nPassando para avisar que o seu pedido já está pronto para retirada/entrega! 🧁`;
-            window.open(
-                `https://wa.me/${pedido.telefone}?text=${encodeURIComponent(msg)}`,
-                "_blank",
-            );
-        }
-    };
-
-    const iniciarEntrega = (id) => {
-        setEditandoEntregaId(id);
-        setSaldoRecebido(false);
-    };
-
-    const confirmarEntrega = async (pedido) => {
-        if (!saldoRecebido) {
-            if (
-                !window.confirm(
-                    "O saldo ainda não foi marcado como recebido. Deseja entregar assim mesmo?",
-                )
-            )
-                return;
-        }
-        try {
-            await updateDoc(doc(db, "pedidos", pedido.id), {
-                status: "entregue",
-                saldoPago: saldoRecebido,
+            await updateDoc(doc(db, "pedidos", pedidoId), {
+                status: novoStatus,
             });
-            setEditandoEntregaId(null);
-            setSaldoRecebido(false);
         } catch (erro) {
-            console.error("Erro ao entregar:", erro);
-            alert("Erro ao confirmar a entrega.");
+            console.error(erro);
+            alert("Erro ao atualizar o status na cozinha.");
         }
     };
 
-    const emitirNF = (pedido) => {
-        alert(
-            `Integração de Nota Fiscal (NFC-e) em breve!\n\nSerá emitida uma nota para ${pedido.cliente} no valor de ${formatarDinheiro(pedido.valorTotal)}.`,
-        );
+    // Formata a data e hora para exibição amigável
+    const formatarData = (dataIso) => {
+        if (!dataIso) return "Imediato";
+        const data = new Date(dataIso);
+        return data.toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
     };
+
+    // Filtra os pedidos relevantes para o painel da cozinha
+    const pedidosAtivos = pedidos.filter((p) => {
+        // Esconde cancelados, pendentes (ainda na triagem) e aguardando_pix
+        if (["cancelado", "pendente", "aguardando_pix"].includes(p.status))
+            return false;
+
+        // Se já foi entregue, só mostra se a entrega foi feita hoje (para manter o quadro limpo)
+        if (p.status === "entregue") {
+            const dataRef = p.dataEntrega ? p.dataEntrega : p.criadoEm;
+            return isHoje(dataRef);
+        }
+        return true;
+    });
+
+    // Definição das Colunas do Kanban
+    const colunas = [
+        {
+            id: "agendado",
+            titulo: "Na Fila (A Fazer)",
+            cor: "border-amber-200 bg-amber-50/50",
+            cabecalho: "bg-amber-100",
+            texto: "text-amber-800",
+            icone: <Clock size={20} className="text-amber-600" />,
+        },
+        {
+            id: "preparando",
+            titulo: "Em Produção",
+            cor: "border-blue-200 bg-blue-50/50",
+            cabecalho: "bg-blue-100",
+            texto: "text-blue-800",
+            icone: <ChefHat size={20} className="text-blue-600" />,
+        },
+        {
+            id: "pronto",
+            titulo: "Pronto / Aguarda Rota",
+            cor: "border-indigo-200 bg-indigo-50/50",
+            cabecalho: "bg-indigo-100",
+            texto: "text-indigo-800",
+            icone: <Truck size={20} className="text-indigo-600" />,
+        },
+        {
+            id: "entregue",
+            titulo: "Concluídos Hoje",
+            cor: "border-emerald-200 bg-emerald-50/50",
+            cabecalho: "bg-emerald-100",
+            texto: "text-emerald-800",
+            icone: <CheckCircle size={20} className="text-emerald-600" />,
+        },
+    ];
 
     return (
-        <div className="animate-in fade-in duration-300">
-            {/* Grid atualizado para 4 colunas em telas muito grandes, ou 2 em telas médias */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                {/* Coluna 1: A Fazer */}
-                <div className="bg-slate-200/50 rounded-3xl p-5 min-h-[500px]">
-                    <h3 className="font-bold text-slate-700 mb-4 px-2 flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-amber-400"></div>{" "}
-                        A Fazer
-                    </h3>
-                    <div className="space-y-4">
-                        {pedidos
-                            .filter((p) => {
-                                if (p.status !== "agendado") return false;
-                                const a = new Date();
-                                a.setDate(a.getDate() + 1);
-                                return (
-                                    isHoje(p.dataEntrega) ||
-                                    (p.dataEntrega &&
-                                        p.dataEntrega.split("T")[0] ===
-                                            a.toLocaleDateString("en-CA"))
-                                );
-                            })
-                            .map((pedido) => (
-                                <div
-                                    key={pedido.id}
-                                    className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"
+        <div className="animate-in fade-in duration-500">
+            {/* Dica de UX para a cozinha */}
+            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3">
+                <ChefHat size={20} />
+                <p className="text-sm font-medium">
+                    <b>Painel de Produção (KDS):</b> Clique nos botões ao final
+                    de cada cartão para avançar os pedidos na linha de produção.
+                </p>
+            </div>
+
+            {/* Layout do Kanban (Scrol Horizontal se necessário) */}
+            <div className="flex h-[calc(100vh-220px)] min-h-[600px] gap-6 overflow-x-auto pb-4 snap-x">
+                {colunas.map((coluna) => {
+                    const pedidosDaColuna = pedidosAtivos.filter(
+                        (p) => p.status === coluna.id,
+                    );
+
+                    // Ordenação: Os que têm de ser entregues mais cedo aparecem primeiro
+                    pedidosDaColuna.sort(
+                        (a, b) =>
+                            new Date(a.dataEntrega || a.criadoEm) -
+                            new Date(b.dataEntrega || b.criadoEm),
+                    );
+
+                    return (
+                        <div
+                            key={coluna.id}
+                            className={`flex-shrink-0 w-80 lg:w-96 flex flex-col rounded-3xl border-2 snap-start ${coluna.cor}`}
+                        >
+                            {/* Cabeçalho da Coluna */}
+                            <div
+                                className={`p-4 border-b border-black/5 flex justify-between items-center rounded-t-3xl ${coluna.cabecalho}`}
+                            >
+                                <h3
+                                    className={`font-black flex items-center gap-2 ${coluna.texto}`}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <p
-                                            className="font-bold text-slate-800 line-clamp-1"
-                                            title={pedido.cliente}
-                                        >
-                                            {pedido.cliente}
-                                        </p>
-                                        <span
-                                            className={`text-[10px] font-bold px-2 py-1 rounded-md whitespace-nowrap ${isHoje(pedido.dataEntrega) ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-600"}`}
-                                        >
-                                            {isHoje(pedido.dataEntrega)
-                                                ? "HOJE"
-                                                : "AMANHÃ"}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl">
-                                        {formatarItensPedido(pedido.itens)}
-                                    </p>
-                                    <button
-                                        onClick={() =>
-                                            mudarStatus(
-                                                pedido.id,
-                                                "em_producao",
-                                            )
-                                        }
-                                        className="w-full bg-amber-100 text-amber-700 hover:bg-amber-200 py-2.5 rounded-xl font-bold text-sm flex justify-center items-center transition"
-                                    >
-                                        Iniciar{" "}
-                                        <ChevronRight
-                                            size={16}
-                                            className="ml-1"
+                                    {coluna.icone} {coluna.titulo}
+                                </h3>
+                                <span className="bg-white/80 text-slate-700 text-xs font-black px-2.5 py-1 rounded-lg shadow-sm">
+                                    {pedidosDaColuna.length}
+                                </span>
+                            </div>
+
+                            {/* Área de Cartões (Scroll Vertical Interno) */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                                {pedidosDaColuna.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-center opacity-50 p-6">
+                                        <AlertCircle
+                                            size={32}
+                                            className={`mb-2 ${coluna.texto}`}
                                         />
-                                    </button>
-                                </div>
-                            ))}
-                    </div>
-                </div>
-
-                {/* Coluna 2: Em Preparo */}
-                <div className="bg-amber-50/60 rounded-3xl p-5 min-h-[500px]">
-                    <h3 className="font-bold text-amber-800 mb-4 px-2 flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-blue-400"></div>{" "}
-                        Em Produção
-                    </h3>
-                    <div className="space-y-4">
-                        {pedidos
-                            .filter((p) => p.status === "em_producao")
-                            .map((pedido) => (
-                                <div
-                                    key={pedido.id}
-                                    className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-l-4 border-l-blue-400"
-                                >
-                                    <p className="font-bold text-slate-800 mb-2">
-                                        {pedido.cliente}
-                                    </p>
-                                    <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl">
-                                        {formatarItensPedido(pedido.itens)}
-                                    </p>
-                                    <button
-                                        onClick={() =>
-                                            avisarClientePronto(pedido)
-                                        }
-                                        className="w-full bg-blue-100 text-blue-700 hover:bg-blue-200 py-2.5 rounded-xl font-bold text-sm flex justify-center items-center transition"
-                                    >
-                                        <CheckCircle
-                                            size={16}
-                                            className="mr-2"
-                                        />{" "}
-                                        Marcar Pronto
-                                    </button>
-                                </div>
-                            ))}
-                    </div>
-                </div>
-
-                {/* Coluna 3: Pronto (NOVA COLUNA) */}
-                <div className="bg-emerald-50/60 rounded-3xl p-5 min-h-[500px]">
-                    <h3 className="font-bold text-emerald-800 mb-4 px-2 flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-emerald-400"></div>{" "}
-                        Pronto
-                    </h3>
-                    <div className="space-y-4">
-                        {pedidos
-                            .filter((p) => p.status === "pronto")
-                            .map((pedido) => {
-                                // Inteligência: Calcula quanto falta receber. Se já pagou sinal, falta metade. Se não, falta tudo.
-                                const valorFaltante = pedido.sinalPago
-                                    ? pedido.valorTotal / 2
-                                    : pedido.valorTotal;
-
-                                return (
-                                    <div
-                                        key={pedido.id}
-                                        className="bg-white p-5 rounded-2xl shadow-sm border border-emerald-100 border-l-4 border-l-emerald-400"
-                                    >
-                                        {/* CABEÇALHO DO CARD COM BOTÃO NF-E */}
-                                        <div className="flex justify-between items-start mb-2">
-                                            <p className="font-bold text-slate-800 pr-2">
-                                                {pedido.cliente}
-                                            </p>
-
-                                            {/* Integração do Botão de Nota Fiscal */}
-                                            <div className="flex gap-2 flex-shrink-0">
-                                                {pedido.urlNotaFiscal ? (
-                                                    <a
-                                                        href={
-                                                            pedido.urlNotaFiscal
-                                                        }
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition"
-                                                        title="Ver Nota Fiscal"
-                                                    >
-                                                        <FileText size={16} />
-                                                    </a>
-                                                ) : (
-                                                    <button
-                                                        onClick={() =>
-                                                            emitirNota(pedido)
-                                                        }
-                                                        className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-pink-100 hover:text-pink-600 transition"
-                                                        title="Emitir Nota Fiscal"
-                                                    >
-                                                        <ExternalLink
-                                                            size={16}
-                                                        />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <p className="text-xs text-slate-500 mb-3 line-clamp-2">
-                                            {formatarItensPedido(pedido.itens)}
+                                        <p
+                                            className={`text-sm font-bold ${coluna.texto}`}
+                                        >
+                                            Nenhum pedido aqui
                                         </p>
-
-                                        {/* LÓGICA DE ENTREGA E SALDO INTACTA */}
-                                        {editandoEntregaId === pedido.id ? (
-                                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 space-y-3">
-                                                <label className="flex items-center gap-3 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={saldoRecebido}
-                                                        onChange={(e) =>
-                                                            setSaldoRecebido(
-                                                                e.target
-                                                                    .checked,
-                                                            )
-                                                        }
-                                                        className="w-5 h-5 accent-emerald-600"
-                                                    />
-                                                    <span className="text-sm font-bold text-emerald-800 leading-tight">
-                                                        Recebi{" "}
-                                                        {formatarDinheiro(
-                                                            valorFaltante,
-                                                        )}{" "}
-                                                        <br />
-                                                        <span className="text-xs font-normal text-emerald-600">
-                                                            (
-                                                            {pedido.sinalPago
-                                                                ? "Saldo final"
-                                                                : "Valor total"}
-                                                            )
+                                    </div>
+                                ) : (
+                                    pedidosDaColuna.map((pedido) => (
+                                        <div
+                                            key={pedido.id}
+                                            className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col"
+                                        >
+                                            {/* Topo do Cartão: Cliente e Hora */}
+                                            <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-black text-slate-800 text-lg leading-tight">
+                                                        {pedido.cliente}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-1">
+                                                        <Clock size={12} />{" "}
+                                                        Para:{" "}
+                                                        <span className="font-bold text-slate-700">
+                                                            {formatarData(
+                                                                pedido.dataEntrega,
+                                                            )}
                                                         </span>
-                                                    </span>
-                                                </label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() =>
-                                                            confirmarEntrega(
-                                                                pedido,
-                                                            )
-                                                        }
-                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-bold text-xs transition"
-                                                    >
-                                                        Confirmar
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            setEditandoEntregaId(
-                                                                null,
-                                                            )
-                                                        }
-                                                        className="px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-lg font-bold text-xs transition"
-                                                    >
-                                                        X
-                                                    </button>
+                                                    </p>
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <button
-                                                onClick={() =>
-                                                    iniciarEntrega(pedido.id)
-                                                }
-                                                className="w-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 py-2.5 rounded-xl font-bold text-sm flex justify-center items-center transition"
-                                            >
-                                                <CheckCircle
-                                                    size={16}
-                                                    className="mr-2"
-                                                />{" "}
-                                                Entregar
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                    </div>
-                </div>
 
-                {/* Coluna 4: Entregues (COM BOTÃO DE NF) */}
-                <div className="bg-slate-100/60 rounded-3xl p-5 min-h-[500px]">
-                    <h3 className="font-bold text-slate-700 mb-4 px-2 flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-slate-300"></div>{" "}
-                        Entregues
-                    </h3>
-                    <div className="space-y-4">
-                        {pedidos
-                            .filter((p) => p.status === "entregue")
-                            .map((pedido) => (
-                                <div
-                                    key={pedido.id}
-                                    className="bg-white p-4 rounded-2xl border border-slate-200 opacity-80"
-                                >
-                                    <div className="flex justify-between items-center mb-2">
-                                        <p
-                                            className="font-bold text-slate-500 line-through truncate mr-2"
-                                            title={pedido.cliente}
-                                        >
-                                            {pedido.cliente}
-                                        </p>
-                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-                                            CONCLUÍDO
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-slate-400 mb-4 line-clamp-1">
-                                        {formatarItensPedido(pedido.itens)}
-                                    </p>
+                                            {/* Meio do Cartão: Lista de Itens Destacada */}
+                                            <div className="p-4 flex-1">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                                    Itens a Preparar:
+                                                </p>
+                                                <ul className="space-y-2">
+                                                    {(pedido.itens || []).map(
+                                                        (item, i) => (
+                                                            <li
+                                                                key={i}
+                                                                className="bg-slate-50 border border-slate-100 p-2.5 rounded-xl flex justify-between items-center"
+                                                            >
+                                                                <span className="font-bold text-slate-700 text-sm line-clamp-2">
+                                                                    {item.nome}
+                                                                </span>
+                                                                <span className="bg-pink-100 text-pink-700 font-black px-2.5 py-1 rounded-lg text-sm flex-shrink-0 shadow-sm border border-pink-200">
+                                                                    x
+                                                                    {
+                                                                        item.quantidade
+                                                                    }
+                                                                </span>
+                                                            </li>
+                                                        ),
+                                                    )}
+                                                </ul>
 
-                                    {/* Botão de Nota Fiscal (Preparado para Integração Futura) */}
-                                    <button
-                                        onClick={() => emitirNF(pedido)}
-                                        className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg font-bold text-xs flex justify-center items-center transition shadow-sm"
-                                    >
-                                        <FileText
-                                            size={14}
-                                            className="mr-1.5"
-                                        />{" "}
-                                        Emitir NF
-                                    </button>
-                                </div>
-                            ))}
-                    </div>
-                </div>
+                                                {pedido.endereco && (
+                                                    <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-2">
+                                                        <MapPin
+                                                            size={16}
+                                                            className="text-indigo-500 flex-shrink-0 mt-0.5"
+                                                        />
+                                                        <p className="text-xs text-indigo-800 font-medium">
+                                                            {pedido.endereco}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Fundo do Cartão: Botões de Ação (Apenas para não-entregues) */}
+                                            {pedido.status !== "entregue" && (
+                                                <div className="p-3 bg-slate-50 border-t border-slate-100">
+                                                    {pedido.status ===
+                                                        "agendado" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                atualizarStatus(
+                                                                    pedido.id,
+                                                                    "preparando",
+                                                                )
+                                                            }
+                                                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-md active:scale-95"
+                                                        >
+                                                            <Play size={18} />{" "}
+                                                            Iniciar Preparo
+                                                        </button>
+                                                    )}
+                                                    {pedido.status ===
+                                                        "preparando" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                atualizarStatus(
+                                                                    pedido.id,
+                                                                    "pronto",
+                                                                )
+                                                            }
+                                                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-md active:scale-95"
+                                                        >
+                                                            <Check size={18} />{" "}
+                                                            Marcar como Pronto
+                                                        </button>
+                                                    )}
+                                                    {pedido.status ===
+                                                        "pronto" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                atualizarStatus(
+                                                                    pedido.id,
+                                                                    "entregue",
+                                                                )
+                                                            }
+                                                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-md active:scale-95"
+                                                        >
+                                                            <Truck size={18} />{" "}
+                                                            Despachar (Entregue)
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

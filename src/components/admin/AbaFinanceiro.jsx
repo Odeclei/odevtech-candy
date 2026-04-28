@@ -6,8 +6,6 @@ import {
     Plus,
     Trash2,
     Calendar,
-    ShoppingBag,
-    Package,
     FileText,
 } from "lucide-react";
 import {
@@ -27,6 +25,8 @@ export default function AbaFinanceiro({
     formatarDinheiro,
 }) {
     const [despesas, setDespesas] = useState([]);
+    const [comandas, setComandas] = useState([]); // NOVO ESTADO: Comandas do Bar
+
     const [novaDescricao, setNovaDescricao] = useState("");
     const [novoValor, setNovoValor] = useState("");
     const [novaData, setNovaData] = useState(
@@ -39,7 +39,7 @@ export default function AbaFinanceiro({
     const [mesFiltro, setMesFiltro] = useState(new Date().getMonth());
     const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
 
-    // Buscar Despesas no Firebase
+    // 1. Buscar Despesas no Firebase
     useEffect(() => {
         const q = query(
             collection(db, "despesas"),
@@ -47,6 +47,19 @@ export default function AbaFinanceiro({
         );
         return onSnapshot(q, (snapshot) => {
             setDespesas(
+                snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+            );
+        });
+    }, [nomeDaLoja]);
+
+    // 2. Buscar Comandas (Bar/Mesas) no Firebase
+    useEffect(() => {
+        const q = query(
+            collection(db, "comandas"),
+            where("loja", "==", nomeDaLoja),
+        );
+        return onSnapshot(q, (snapshot) => {
+            setComandas(
                 snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
             );
         });
@@ -82,9 +95,33 @@ export default function AbaFinanceiro({
     };
 
     // ==========================================
-    // CÁLCULOS DO FLUXO DE CAIXA
+    // CÁLCULOS DO FLUXO DE CAIXA UNIFICADO
     // ==========================================
-    // 1. Unificar Pedidos (Receitas) e Despesas
+
+    // Processar o dinheiro recebido nas Mesas/Comandas
+    const receitasComandas = comandas
+        .map((c) => {
+            let pago = 0;
+            (c.itens || []).forEach((item) => {
+                pago += (item.qtd_paga || 0) * item.preco;
+            });
+            const taxaPaga = pago * 0.1;
+            const totalPago = pago + taxaPaga;
+
+            return {
+                id: c.id,
+                tipo: "receita",
+                descricao: `${c.identificador} (${c.cliente})`,
+                categoria: "Bar / Salão",
+                valor: totalPago,
+                data: c.abertaEm
+                    ? c.abertaEm.split("T")[0]
+                    : new Date().toISOString().split("T")[0],
+            };
+        })
+        .filter((t) => t.valor > 0); // Só entra no caixa se a mesa já pagou alguma coisa
+
+    // Unificar Pedidos (Delivery), Comandas (Bar) e Despesas
     const transacoesDoMes = [
         ...pedidos
             .filter((p) => p.status === "entregue" || p.status === "pronto")
@@ -96,11 +133,12 @@ export default function AbaFinanceiro({
                     id: p.id,
                     tipo: "receita",
                     descricao: `Pedido: ${p.cliente}`,
-                    categoria: "Venda",
+                    categoria: "Delivery / Encomenda",
                     valor: p.valorTotal || 0,
                     data: dataRef,
                 };
             }),
+        ...receitasComandas,
         ...despesas.map((d) => ({
             id: d.id,
             tipo: "despesa",
@@ -112,10 +150,10 @@ export default function AbaFinanceiro({
     ]
         .filter((t) => {
             // Filtrar pelo Mês e Ano selecionados
-            const d = new Date(t.data + "T12:00:00");
+            const d = new Date(t.data + "T12:00:00"); // Força o fuso horário correto
             return d.getMonth() === mesFiltro && d.getFullYear() === anoFiltro;
         })
-        .sort((a, b) => new Date(b.data) - new Date(a.data)); // Ordenar do mais recente para o mais antigo
+        .sort((a, b) => new Date(b.data) - new Date(a.data));
 
     const totalReceitas = transacoesDoMes
         .filter((t) => t.tipo === "receita")
@@ -134,14 +172,14 @@ export default function AbaFinanceiro({
             {/* Header com Filtro de Mês */}
             <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 gap-4">
                 <div className="flex items-center gap-2 text-slate-700 font-bold">
-                    <Calendar size={20} className="text-pink-600" />
+                    <Calendar size={20} className="text-blue-600" />
                     Competência:
                 </div>
                 <div className="flex gap-2">
                     <select
                         value={mesFiltro}
                         onChange={(e) => setMesFiltro(Number(e.target.value))}
-                        className="border border-slate-200 p-2 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none font-medium text-slate-700"
+                        className="border border-slate-200 p-2 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none font-medium text-slate-700"
                     >
                         {[
                             "Janeiro",
@@ -165,7 +203,7 @@ export default function AbaFinanceiro({
                     <select
                         value={anoFiltro}
                         onChange={(e) => setAnoFiltro(Number(e.target.value))}
-                        className="border border-slate-200 p-2 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none font-medium text-slate-700"
+                        className="border border-slate-200 p-2 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none font-medium text-slate-700"
                     >
                         {[2024, 2025, 2026].map((a) => (
                             <option key={a} value={a}>
@@ -218,7 +256,7 @@ export default function AbaFinanceiro({
                         Margem de Lucro
                     </p>
                     <div className="flex justify-between items-end">
-                        <p className="text-3xl font-black text-pink-400">
+                        <p className="text-3xl font-black text-blue-400">
                             {margemLucro}%
                         </p>
                         <span className="text-xs bg-slate-800 px-2 py-1 rounded-lg text-slate-300 font-medium">
@@ -246,8 +284,8 @@ export default function AbaFinanceiro({
                                 onChange={(e) =>
                                     setNovaDescricao(e.target.value)
                                 }
-                                placeholder="Ex: Farinha de Trigo 5kg"
-                                className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none"
+                                placeholder="Ex: Fornecedor de Bebidas"
+                                className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none"
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -263,7 +301,7 @@ export default function AbaFinanceiro({
                                     onChange={(e) =>
                                         setNovoValor(e.target.value)
                                     }
-                                    className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none"
+                                    className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none"
                                 />
                             </div>
                             <div>
@@ -277,7 +315,7 @@ export default function AbaFinanceiro({
                                     onChange={(e) =>
                                         setNovaData(e.target.value)
                                     }
-                                    className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none text-sm"
+                                    className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none text-sm"
                                 />
                             </div>
                         </div>
@@ -290,26 +328,28 @@ export default function AbaFinanceiro({
                                 onChange={(e) =>
                                     setNovaCategoria(e.target.value)
                                 }
-                                className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 outline-none bg-white"
+                                className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none bg-white"
                             >
                                 <option value="Ingredientes">
-                                    Ingredientes / Insumos
+                                    Ingredientes / Bebidas
                                 </option>
                                 <option value="Embalagens">Embalagens</option>
                                 <option value="Custos Fixos">
-                                    Custos Fixos (Luz, Água, Renda)
+                                    Custos Fixos (Luz, Água, Aluguel)
                                 </option>
                                 <option value="Marketing">
                                     Marketing / Tráfego
                                 </option>
-                                <option value="Equipa">Pagamento Equipa</option>
+                                <option value="Equipa">
+                                    Pagamento Equipa / Garçons
+                                </option>
                                 <option value="Outros">Outros</option>
                             </select>
                         </div>
                         <button
                             type="submit"
                             disabled={salvando}
-                            className="w-full bg-slate-900 hover:bg-pink-600 text-white font-bold py-4 rounded-xl transition-all flex justify-center items-center gap-2 mt-2"
+                            className="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-all flex justify-center items-center gap-2 mt-2"
                         >
                             <Plus size={18} />{" "}
                             {salvando ? "A registar..." : "Registar Saída"}
@@ -345,18 +385,29 @@ export default function AbaFinanceiro({
                                             )}
                                         </div>
                                         <div>
-                                            <p className="font-bold text-slate-800">
+                                            <p className="font-bold text-slate-800 line-clamp-1">
                                                 {t.descricao}
                                             </p>
-                                            <div className="flex items-center gap-2 mt-1">
+                                            <div className="flex items-center flex-wrap gap-2 mt-1">
                                                 <span className="text-xs text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-md font-medium">
                                                     {t.data
                                                         .split("-")
                                                         .reverse()
                                                         .join("/")}
                                                 </span>
-                                                <span className="text-xs text-slate-400">
-                                                    • {t.categoria}
+                                                {/* BADGE DINÂMICO PARA IDENTIFICAR A ORIGEM DO DINHEIRO */}
+                                                <span
+                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                                                        t.categoria ===
+                                                        "Bar / Salão"
+                                                            ? "bg-amber-100 text-amber-700"
+                                                            : t.categoria ===
+                                                                "Delivery / Encomenda"
+                                                              ? "bg-pink-100 text-pink-700"
+                                                              : "bg-slate-100 text-slate-500"
+                                                    }`}
+                                                >
+                                                    {t.categoria}
                                                 </span>
                                             </div>
                                         </div>
