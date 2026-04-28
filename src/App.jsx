@@ -32,7 +32,7 @@ const RotaProtegida = ({ children }) => {
     const [autorizado, setAutorizado] = useState(false);
 
     // E-mail do dono da OdevTech (Substitua pelo SEU e-mail real do Google/Firebase)
-    const SUPER_ADMIN_EMAIL = "odecleiftamanini@gmail.com";
+    const SUPER_ADMIN_EMAIL = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
 
     useEffect(() => {
         const verificarPermissoes = async (user) => {

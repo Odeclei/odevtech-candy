@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // LOJAS: Apenas owner e super admin podem acessar
+    // ==========================================
+    match /lojas/{lojaId} {
+      // Ler
+      allow read: if request.auth != null && 
+        (request.auth.email == resource.data.ownerEmail ||
+         request.auth.email == env.get('super_admin_email') ||
+         isMembroEquipe(lojaId));
+      
+      // Escrever (apenas owner ou super admin)
+      allow write: if request.auth != null &&
+        (request.auth.email == resource.data.ownerEmail ||
+         request.auth.email == env.get('super_admin_email'));
+    }
+    
+    // ==========================================
+    // PEDIDOS: Apenas equipe da loja pode acessar
+    // ==========================================
+    match /pedidos/{pedidoId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.email == get(/databases/$(database)/documents/lojas/$(resource.data.loja)).data.ownerEmail ||
+         isMembroEquipe(resource.data.loja));
+    }
+    
+    // ==========================================
+    // PRODUTOS: Apenas equipe da loja pode ler/escrever
+    // ==========================================
+    match /produtos/{produtoId} {
+      allow read: if request.auth != null && 
+        isMembroEquipe(resource.data.loja);
+      allow write: if request.auth != null && 
+        (request.auth.email == get(/databases/$(database)/documents/lojas/$(resource.data.loja)).data.ownerEmail ||
+         isMembroEquipe(resource.data.loja));
+    }
+    
+    // ==========================================
+    // CLIENTES: Apenas equipe da loja pode acessar
+    // ==========================================
+    match /clientes/{clienteId} {
+      allow read, write: if request.auth != null && 
+        isMembroEquipe(resource.data.loja);
+    }
+    
+    // ==========================================
+    // EQUIPE: Apenas owner pode gerenciar
+    // ==========================================
+    match /equipe/{membroId} {
+      allow read: if request.auth != null && 
+        (request.auth.email == get(/databases/$(database)/documents/lojas/$(resource.data.loja)).data.ownerEmail ||
+         request.auth.uid == membroId);
+      
+      allow write: if request.auth != null && 
+        request.auth.email == get(/databases/$(database)/documents/lojas/$(resource.data.loja)).data.ownerEmail;
+    }
+    
+    // ==========================================
+    // FUNÇÕES AUXILIARES
+    // ==========================================
+    function isMembroEquipe(lojaId) {
+      return exists(/databases/$(database)/documents/equipe/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/equipe/$(request.auth.uid)).data.loja == lojaId;
+    }
+  }
+}
