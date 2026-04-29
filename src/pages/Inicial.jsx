@@ -1,12 +1,91 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom"; // Adiciona este import
-import { useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+
+// ==========================================
+// DADOS DO CARROSSEL DE SOLUÇÕES
+// ==========================================
+const SOLUCOES = [
+    {
+        id: "transapp",
+        titulo: "TransApp Frotas",
+        icone: "fas fa-truck-fast",
+        descricao:
+            "O controle definitivo para sua transportadora. Gestão completa de viagens, controle rigoroso de despesas (pedágio, combustível, manutenção), adiantamentos e saldo de fretes.",
+        features: [
+            "DRE por Viagem",
+            "Controle de Categorias de Gasto",
+            "Histórico de Veículos",
+        ],
+        link: "https://transapp.odevtech.com.br",
+        textoLink: "Acessar TransApp",
+        cores: {
+            bgGeral:
+                "hover:border-blue-300 dark:hover:border-blue-500 hover:shadow-blue-900/5 dark:hover:shadow-blue-900/20",
+            bgEfeito: "bg-blue-100 dark:bg-blue-900/30",
+            bgIcone:
+                "bg-blue-600 text-white shadow-blue-200 dark:shadow-blue-900/40",
+            textCheck: "text-blue-500",
+            textLink:
+                "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+        },
+    },
+    {
+        id: "confeitaria",
+        titulo: "OdevTech Confeitaria",
+        icone: "fas fa-cake-candles",
+        descricao:
+            "O sistema ideal para confeiteiras e docerias artesanais. Acabe com a confusão no WhatsApp com um catálogo digital inteligente, quadro de produção visual e fluxo de caixa.",
+        features: [
+            "Catálogo Direto no WhatsApp",
+            "Quadro Kanban de Produção",
+            "Controle de Sinais (50% Pago)",
+        ],
+        link: "/crisdoces",
+        textoLink: "Ver Demonstração",
+        cores: {
+            bgGeral:
+                "hover:border-pink-300 dark:hover:border-pink-500 hover:shadow-pink-900/5 dark:hover:shadow-pink-900/20",
+            bgEfeito: "bg-pink-100 dark:bg-pink-900/20",
+            bgIcone:
+                "bg-pink-600 text-white shadow-pink-200 dark:shadow-pink-900/40",
+            textCheck: "text-pink-500",
+            textLink:
+                "text-pink-600 dark:text-pink-400 hover:text-pink-800 dark:hover:text-pink-300",
+        },
+    },
+    {
+        id: "bares",
+        titulo: "OdevTech Bares & Restaurantes",
+        icone: "fas fa-beer-mug-empty",
+        descricao:
+            "Operação rápida e sem atritos. O cliente pede pelo celular, a cozinha recebe direto na tela, e o caixa fatura com precisão. Controle de estoque integrado.",
+        features: [
+            "Autoatendimento (QR Code na Mesa)",
+            "Painel de Cozinha (KDS)",
+            "Ficha Técnica e Custo Real",
+        ],
+        link: "/barteste",
+        textoLink: "Ver Demonstração",
+        cores: {
+            bgGeral:
+                "hover:border-amber-300 dark:hover:border-amber-500 hover:shadow-amber-900/5 dark:hover:shadow-amber-900/20",
+            bgEfeito: "bg-amber-100 dark:bg-amber-900/20",
+            bgIcone:
+                "bg-amber-500 text-white shadow-amber-200 dark:shadow-amber-900/40",
+            textCheck: "text-amber-500",
+            textLink:
+                "text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300",
+        },
+    },
+];
 
 export default function Inicial() {
-    // 1. Criamos um "Estado" no React para controlar se o tema escuro está ativo
     const [isDark, setIsDark] = useState(false);
 
-    // 2. O useEffect roda uma vez quando a página carrega para ver a preferência salva do usuário
+    // Estados do Carrossel
+    const [slideAtual, setSlideAtual] = useState(0);
+    const [isHovered, setIsHovered] = useState(false);
+
     useEffect(() => {
         if (
             localStorage.getItem("color-theme") === "dark" ||
@@ -21,7 +100,6 @@ export default function Inicial() {
         }
     }, []);
 
-    // 3. Função que roda quando clicamos no botão de trocar o tema (onClick)
     const toggleTheme = () => {
         if (isDark) {
             document.documentElement.classList.remove("dark");
@@ -34,14 +112,22 @@ export default function Inicial() {
         }
     };
 
+    // Auto-Play do Carrossel
+    useEffect(() => {
+        if (isHovered) return; // Pausa se o rato estiver em cima
+        const timer = setInterval(() => {
+            setSlideAtual((prev) => (prev + 1) % SOLUCOES.length);
+        }, 4000); // Roda a cada 4 segundos
+        return () => clearInterval(timer);
+    }, [isHovered]);
+
     return (
-        // Note que todos os "class" foram trocados por "className"
         <div className="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 antialiased transition-colors duration-300 min-h-screen">
-            {/* <!-- Navegação --> */}
+            {/* */}
             <nav className="fixed w-full bg-white/90 dark:bg-slate-950/90 backdrop-blur-md z-50 border-b border-slate-200 dark:border-slate-800 transition-colors duration-300">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-20">
-                        {/* <!-- Logo --> */}
+                        {/* */}
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-200 dark:shadow-blue-900/20">
                                 <i className="fas fa-layer-group text-white text-xl"></i>
@@ -54,7 +140,7 @@ export default function Inicial() {
                             </span>
                         </div>
 
-                        {/* <!-- Links Desktop --> */}
+                        {/* */}
                         <div className="hidden md:flex items-center space-x-8">
                             <a
                                 href="#solucoes"
@@ -69,13 +155,11 @@ export default function Inicial() {
                                 Como Funciona
                             </a>
 
-                            {/* <!-- Botão Alternar Tema Desktop --> */}
                             <button
                                 onClick={toggleTheme}
                                 type="button"
                                 className="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none rounded-lg text-lg p-2.5 transition-colors"
                             >
-                                {/* Aqui usamos um IF simples do React (Ternário): Se for dark, mostra Sol, senão mostra Lua */}
                                 {isDark ? (
                                     <i className="fas fa-sun"></i>
                                 ) : (
@@ -92,7 +176,7 @@ export default function Inicial() {
                             </Link>
                         </div>
 
-                        {/* <!-- Menu Mobile (Sanduíche e Tema) --> */}
+                        {/* */}
                         <div className="md:hidden flex items-center gap-4">
                             <button
                                 onClick={toggleTheme}
@@ -113,7 +197,7 @@ export default function Inicial() {
                 </div>
             </nav>
 
-            {/* <!-- Hero Section (Dobra Principal) --> */}
+            {/* */}
             <section className="pt-32 pb-20 md:pt-48 md:pb-32 px-4 overflow-hidden relative">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-blue-100/50 dark:bg-blue-900/20 rounded-full blur-3xl -z-10 transition-colors duration-300"></div>
 
@@ -159,7 +243,7 @@ export default function Inicial() {
                 </div>
             </section>
 
-            {/* <!-- Soluções Section --> */}
+            {/* */}
             <section
                 id="solucoes"
                 className="py-20 bg-white dark:bg-slate-950 border-y border-slate-100 dark:border-slate-900 transition-colors duration-300"
@@ -176,130 +260,98 @@ export default function Inicial() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-                        {/* <!-- Card TransApp --> */}
-                        <div className="group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-10 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-900/5 dark:hover:shadow-blue-900/20 transition-all duration-300 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100 dark:bg-blue-900/30 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-                            <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg shadow-blue-200 dark:shadow-blue-900/40">
-                                <i className="fas fa-truck-fast"></i>
-                            </div>
-                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
-                                TransApp Frotas
-                            </h3>
-                            <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
-                                O controle definitivo para sua transportadora.
-                                Gestão completa de viagens, controle rigoroso de
-                                despesas (pedágio, combustível, manutenção),
-                                adiantamentos e saldo de fretes.
-                            </p>
-                            <ul className="space-y-3 mb-8 relative z-10">
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-blue-500"></i>{" "}
-                                    DRE por Viagem
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-blue-500"></i>{" "}
-                                    Controle de Categorias de Gasto
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-blue-500"></i>{" "}
-                                    Histórico de Veículos
-                                </li>
-                            </ul>
-                            <a
-                                href="https://transapp.odevtech.com.br"
-                                className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold hover:text-blue-800 dark:hover:text-blue-300 transition-colors relative z-10"
-                            >
-                                Acessar TransApp{" "}
-                                <i className="fas fa-arrow-right text-sm"></i>
-                            </a>
+                    {/* Janela de Exibição do Carrossel */}
+                    <div
+                        className="overflow-hidden relative w-full max-w-4xl mx-auto pb-10"
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        <div
+                            className="flex transition-transform duration-700 ease-in-out"
+                            style={{
+                                transform: `translateX(-${slideAtual * 100}%)`,
+                            }}
+                        >
+                            {SOLUCOES.map((solucao) => (
+                                <div
+                                    className="w-full flex-shrink-0 px-2 sm:px-4"
+                                    key={solucao.id}
+                                >
+                                    <div
+                                        className={`group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-slate-800 transition-all duration-300 relative overflow-hidden shadow-sm hover:shadow-2xl ${solucao.cores.bgGeral}`}
+                                    >
+                                        <div
+                                            className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 ${solucao.cores.bgEfeito}`}
+                                        ></div>
+
+                                        <div
+                                            className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg ${solucao.cores.bgIcone}`}
+                                        >
+                                            <i className={solucao.icone}></i>
+                                        </div>
+
+                                        <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
+                                            {solucao.titulo}
+                                        </h3>
+
+                                        <p className="text-lg text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
+                                            {solucao.descricao}
+                                        </p>
+
+                                        <ul className="space-y-4 mb-10 relative z-10">
+                                            {solucao.features.map(
+                                                (feature, index) => (
+                                                    <li
+                                                        key={index}
+                                                        className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-bold transition-colors duration-300"
+                                                    >
+                                                        <i
+                                                            className={`fas fa-check-circle text-xl ${solucao.cores.textCheck}`}
+                                                        ></i>{" "}
+                                                        {feature}
+                                                    </li>
+                                                ),
+                                            )}
+                                        </ul>
+
+                                        {solucao.link.startsWith("http") ? (
+                                            <a
+                                                href={solucao.link}
+                                                className={`inline-flex items-center gap-2 font-bold transition-colors relative z-10 text-lg ${solucao.cores.textLink}`}
+                                            >
+                                                {solucao.textoLink}{" "}
+                                                <i className="fas fa-arrow-right text-sm"></i>
+                                            </a>
+                                        ) : (
+                                            <Link
+                                                to={solucao.link}
+                                                className={`inline-flex items-center gap-2 font-bold transition-colors relative z-10 text-lg ${solucao.cores.textLink}`}
+                                            >
+                                                {solucao.textoLink}{" "}
+                                                <i className="fas fa-arrow-right text-sm"></i>
+                                            </Link>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
-                        {/* <!-- Card ProdApp --> */}
-                        <div className="group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-10 border border-slate-200 dark:border-slate-800 hover:border-orange-300 dark:hover:border-orange-500 hover:shadow-2xl hover:shadow-orange-900/5 dark:hover:shadow-orange-900/20 transition-all duration-300 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100 dark:bg-orange-900/20 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-                            <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg shadow-orange-200 dark:shadow-orange-900/40">
-                                <i className="fas fa-industry"></i>
-                            </div>
-                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
-                                ProdApp Indústria
-                            </h3>
-                            <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
-                                Visibilidade total do seu chão de fábrica.
-                                Acompanhamento de ordens de produção, controle
-                                de insumos, tempo de máquina e produtividade da
-                                equipe em tempo real.
-                            </p>
-                            <ul className="space-y-3 mb-8 relative z-10">
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-orange-500"></i>{" "}
-                                    Apontamento de Produção
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-orange-500"></i>{" "}
-                                    Controle de Estoque de Insumos
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-orange-500"></i>{" "}
-                                    Dashboards de Eficiência (OEE)
-                                </li>
-                            </ul>
-                            <button className="inline-flex items-center gap-2 text-slate-400 dark:text-slate-500 font-bold cursor-not-allowed relative z-10">
-                                Lançamento em Breve{" "}
-                                <i className="fas fa-clock text-sm"></i>
-                            </button>
-                        </div>
-
-                        {/* */}
-                        <div className="group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-10 border border-slate-200 dark:border-slate-800 hover:border-pink-300 dark:hover:border-pink-500 hover:shadow-2xl hover:shadow-pink-900/5 dark:hover:shadow-pink-900/20 transition-all duration-300 relative overflow-hidden">
-                            {/* Efeito visual no canto superior */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-100 dark:bg-pink-900/20 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-
-                            {/* Ícone */}
-                            <div className="w-16 h-16 bg-pink-600 text-white rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg shadow-pink-200 dark:shadow-pink-900/40">
-                                <i className="fas fa-cake-candles"></i>
-                            </div>
-
-                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
-                                DoceApp Confeitaria
-                            </h3>
-
-                            <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
-                                O sistema ideal para confeiteiras e docerias
-                                artesanais. Acabe com a confusão no WhatsApp com
-                                um catálogo digital inteligente, quadro de
-                                produção visual e fluxo de caixa.
-                            </p>
-
-                            <ul className="space-y-3 mb-8 relative z-10">
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
-                                    Catálogo Direto no WhatsApp
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
-                                    Quadro Kanban de Produção
-                                </li>
-                                <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-medium transition-colors duration-300">
-                                    <i className="fas fa-check-circle text-pink-500"></i>{" "}
-                                    Controle de Sinais (50% Pago)
-                                </li>
-                            </ul>
-
-                            {/* Link apontando direto para a rota que criamos para teste */}
-                            <a
-                                href="/crisdoces"
-                                className="inline-flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold hover:text-pink-800 dark:hover:text-pink-300 transition-colors relative z-10"
-                            >
-                                Ver Demonstração{" "}
-                                <i className="fas fa-arrow-right text-sm"></i>
-                            </a>
+                        {/* Controles de Navegação (Bolinhas) */}
+                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-3">
+                            {SOLUCOES.map((_, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setSlideAtual(index)}
+                                    className={`h-2.5 rounded-full transition-all duration-300 ${slideAtual === index ? "w-8 bg-blue-600 dark:bg-blue-500" : "w-2.5 bg-slate-300 dark:bg-slate-700"}`}
+                                    aria-label={`Ir para slide ${index + 1}`}
+                                />
+                            ))}
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* <!-- Footer --> */}
+            {/* */}
             <footer className="bg-slate-900 text-slate-300 py-12 border-t border-slate-800">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-2">
@@ -319,7 +371,7 @@ export default function Inicial() {
                             <i className="fab fa-linkedin-in"></i>
                         </a>
                         <a
-                            href="#"
+                            href="https://wa.me/5547999545703"
                             className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors"
                         >
                             <i className="fab fa-whatsapp"></i>

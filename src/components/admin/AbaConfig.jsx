@@ -6,6 +6,8 @@ import {
     ShieldAlert,
     Image as ImageIcon,
     Trash2,
+    MapPin,
+    FileText,
 } from "lucide-react";
 import { doc, setDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebase";
@@ -19,7 +21,9 @@ export default function AbaConfiguracoes({
 }) {
     const [abaConfig, setAbaConfig] = useState("empresa");
 
-    // Estados Locais
+    // ==========================================
+    // ESTADOS: Dados da Empresa (Ampliados)
+    // ==========================================
     const [editNomeExibicao, setEditNomeExibicao] = useState(
         configLoja?.nomeExibicao || "",
     );
@@ -30,6 +34,11 @@ export default function AbaConfiguracoes({
         configLoja?.razaoSocial || "",
     );
     const [editCnpj, setEditCnpj] = useState(configLoja?.cnpj || "");
+    const [editInscricaoEstadual, setEditInscricaoEstadual] = useState(
+        configLoja?.inscricaoEstadual || "",
+    );
+
+    // Endereço
     const [editCep, setEditCep] = useState(configLoja?.cep || "");
     const [editLogradouro, setEditLogradouro] = useState(
         configLoja?.logradouro || "",
@@ -38,10 +47,13 @@ export default function AbaConfiguracoes({
     const [editBairro, setEditBairro] = useState(configLoja?.bairro || "");
     const [editCidade, setEditCidade] = useState(configLoja?.cidade || "");
     const [editEstado, setEditEstado] = useState(configLoja?.estado || "");
+
+    // Recebimentos
     const [editChavePix, setEditChavePix] = useState(
         configLoja?.chavePix || "",
     );
     const [editNomePix, setEditNomePix] = useState(configLoja?.nomePix || "");
+
     const [logoArquivo, setLogoArquivo] = useState(null);
     const [logoAtual, setLogoAtual] = useState(configLoja?.logo || "");
     const [salvandoConfig, setSalvandoConfig] = useState(false);
@@ -58,6 +70,7 @@ export default function AbaConfiguracoes({
             setEditWhatsapp(configLoja.whatsapp || "");
             setEditRazaoSocial(configLoja.razaoSocial || "");
             setEditCnpj(configLoja.cnpj || "");
+            setEditInscricaoEstadual(configLoja.inscricaoEstadual || "");
             setEditCep(configLoja.cep || "");
             setEditLogradouro(configLoja.logradouro || "");
             setEditNumero(configLoja.numero || "");
@@ -96,6 +109,7 @@ export default function AbaConfiguracoes({
                 logo: urlFinalLogo,
                 razaoSocial: editRazaoSocial,
                 cnpj: editCnpj,
+                inscricaoEstadual: editInscricaoEstadual,
                 cep: editCep,
                 logradouro: editLogradouro,
                 numero: editNumero,
@@ -113,7 +127,7 @@ export default function AbaConfiguracoes({
             });
             setConfigLoja((prev) => ({ ...prev, ...dadosSalvar }));
             setLogoAtual(urlFinalLogo);
-            alert("Configurações salvas!");
+            alert("Dados cadastrais e fiscais atualizados com sucesso!");
         } catch (erro) {
             alert("Erro ao salvar as configurações.");
         } finally {
@@ -170,22 +184,23 @@ export default function AbaConfiguracoes({
                     className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaConfig === "equipe" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                 >
                     <ShieldAlert size={18} className="inline mr-2" />{" "}
-                    Utilizadores e Permissões
+                    Utilizadores
                 </button>
             </div>
 
             {abaConfig === "empresa" && (
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-4xl">
+                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-5xl">
                     <form
                         onSubmit={salvarConfiguracoesEmpresa}
-                        className="space-y-8"
+                        className="space-y-10"
                     >
+                        {/* SEÇÃO 1: Identidade Visual */}
                         <div className="flex items-center gap-6 pb-6 border-b border-slate-100">
                             {logoAtual ? (
                                 <img
                                     src={logoAtual}
                                     alt="Logo"
-                                    className="w-24 h-24 rounded-full object-cover border border-slate-200"
+                                    className="w-24 h-24 rounded-full object-cover border border-slate-200 shadow-sm"
                                 />
                             ) : (
                                 <div className="w-24 h-24 rounded-full bg-slate-100 border border-slate-200 border-dashed flex items-center justify-center text-slate-400">
@@ -197,7 +212,8 @@ export default function AbaConfiguracoes({
                                     Logotipo da Empresa
                                 </h3>
                                 <p className="text-sm text-slate-500 mb-3">
-                                    Recomendado: Imagem quadrada (JPG ou PNG).
+                                    Sua marca aparecerá no catálogo e nos cupons
+                                    térmicos.
                                 </p>
                                 <input
                                     type="file"
@@ -205,66 +221,213 @@ export default function AbaConfiguracoes({
                                     onChange={(e) =>
                                         setLogoArquivo(e.target.files[0])
                                     }
-                                    className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                                    className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-2">
-                                    Nome de Exibição no Catálogo
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editNomeExibicao}
-                                    onChange={(e) =>
-                                        setEditNomeExibicao(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                                />
+                        {/* SEÇÃO 2: Dados Jurídicos e Fiscais */}
+                        <div>
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <FileText size={16} /> Informações Fiscais
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Razão Social
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editRazaoSocial}
+                                        onChange={(e) =>
+                                            setEditRazaoSocial(e.target.value)
+                                        }
+                                        placeholder="Ex: Razão Social LTDA"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        CNPJ
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editCnpj}
+                                        onChange={(e) =>
+                                            setEditCnpj(e.target.value)
+                                        }
+                                        placeholder="00.000.000/0001-00"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Inscrição Estadual
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editInscricaoEstadual}
+                                        onChange={(e) =>
+                                            setEditInscricaoEstadual(
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="Isento ou Nº da IE"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Nome de Exibição (Fantasia)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editNomeExibicao}
+                                        onChange={(e) =>
+                                            setEditNomeExibicao(e.target.value)
+                                        }
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        WhatsApp Principal
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editWhatsapp}
+                                        onChange={(e) =>
+                                            setEditWhatsapp(e.target.value)
+                                        }
+                                        placeholder="554799999999"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-2">
-                                    WhatsApp de Atendimento
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editWhatsapp}
-                                    onChange={(e) =>
-                                        setEditWhatsapp(e.target.value)
-                                    }
-                                    placeholder="554799999999"
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                                />
+                        </div>
+
+                        {/* SEÇÃO 3: Endereço da Unidade */}
+                        <div>
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <MapPin size={16} /> Endereço de Operação
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        CEP
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editCep}
+                                        onChange={(e) =>
+                                            setEditCep(e.target.value)
+                                        }
+                                        placeholder="00000-000"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div className="md:col-span-3">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Logradouro (Rua/Av)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editLogradouro}
+                                        onChange={(e) =>
+                                            setEditLogradouro(e.target.value)
+                                        }
+                                        placeholder="Nome da Rua"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Nº
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editNumero}
+                                        onChange={(e) =>
+                                            setEditNumero(e.target.value)
+                                        }
+                                        placeholder="123"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Bairro
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editBairro}
+                                        onChange={(e) =>
+                                            setEditBairro(e.target.value)
+                                        }
+                                        placeholder="Centro"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div className="md:col-span-3">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Cidade
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editCidade}
+                                        onChange={(e) =>
+                                            setEditCidade(e.target.value)
+                                        }
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
+                                    />
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                        Estado
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editEstado}
+                                        onChange={(e) =>
+                                            setEditEstado(e.target.value)
+                                        }
+                                        placeholder="SC"
+                                        maxLength="2"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium text-center uppercase"
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         <button
                             type="submit"
                             disabled={salvandoConfig}
-                            className={`w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white transition-all ${salvandoConfig ? "bg-slate-400" : "bg-slate-900 hover:bg-amber-600"}`}
+                            className={`w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white transition-all shadow-lg ${salvandoConfig ? "bg-slate-400" : "bg-slate-900 hover:bg-amber-600 active:scale-95"}`}
                         >
                             <Save size={20} />{" "}
                             {salvandoConfig
                                 ? "Salvando..."
-                                : "Atualizar Cadastro da Empresa"}
+                                : "Salvar Cadastro Completo"}
                         </button>
                     </form>
                 </div>
             )}
 
+            {/* ABA DE PAGAMENTO (RESTAURADA E SIMPLIFICADA) */}
             {abaConfig === "pagamento" && (
                 <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-3xl">
                     <form
                         onSubmit={salvarConfiguracoesEmpresa}
                         className="space-y-6"
                     >
+                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">
+                            Configuração de Recebimento via Pix
+                        </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-2">
+                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
                                     Chave Pix
                                 </label>
                                 <input
@@ -274,12 +437,12 @@ export default function AbaConfiguracoes({
                                     onChange={(e) =>
                                         setEditChavePix(e.target.value)
                                     }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-2">
-                                    Nome do Titular
+                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                                    Nome do Titular (Banco)
                                 </label>
                                 <input
                                     type="text"
@@ -288,35 +451,22 @@ export default function AbaConfiguracoes({
                                     onChange={(e) =>
                                         setEditNomePix(e.target.value)
                                     }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                                />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-slate-600 mb-2">
-                                    Cidade do Banco
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editCidade}
-                                    onChange={(e) =>
-                                        setEditCidade(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
                                 />
                             </div>
                         </div>
                         <button
                             type="submit"
                             disabled={salvandoConfig}
-                            className="w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white bg-slate-900 hover:bg-amber-600 transition-all"
+                            className="w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white bg-slate-900 hover:bg-amber-600 transition-all shadow-md"
                         >
-                            <Save size={20} /> Salvar Dados de Pagamento
+                            <Save size={20} /> Salvar Chave Pix
                         </button>
                     </form>
                 </div>
             )}
 
+            {/* ABA DE EQUIPE (MANTIDA IGUAL) */}
             {abaConfig === "equipe" && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm h-fit">
@@ -367,14 +517,13 @@ export default function AbaConfiguracoes({
                                     className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none bg-white"
                                 >
                                     <option value="garcom">
-                                        Garçom (Apenas Lançar em Mesas)
+                                        Garçom (Mesas)
                                     </option>
                                     <option value="funcionario">
-                                        Cozinha / Produção (Ver Pedidos e
-                                        Kanban)
+                                        Cozinha / Produção
                                     </option>
                                     <option value="admin">
-                                        Administrador (Acesso Total)
+                                        Administrador (Total)
                                     </option>
                                 </select>
                             </div>
@@ -418,14 +567,7 @@ export default function AbaConfiguracoes({
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <span
-                                                className={`text-[10px] uppercase tracking-widest font-black px-3 py-1 rounded-lg border ${
-                                                    membro.role === "admin"
-                                                        ? "bg-red-50 text-red-600 border-red-200"
-                                                        : membro.role ===
-                                                            "garcom"
-                                                          ? "bg-amber-50 text-amber-600 border-amber-200"
-                                                          : "bg-slate-200 text-slate-600 border-slate-300"
-                                                }`}
+                                                className={`text-[10px] uppercase tracking-widest font-black px-3 py-1 rounded-lg border ${membro.role === "admin" ? "bg-red-50 text-red-600 border-red-200" : membro.role === "garcom" ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-200 text-slate-600 border-slate-300"}`}
                                             >
                                                 {membro.role === "admin"
                                                     ? "Admin"

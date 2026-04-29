@@ -81,39 +81,31 @@ export default function AbaDashboard({
         const clienteEncontrado = clientes.find(
             (c) => c.documento === editDocumento || c.cpf === editDocumento,
         );
-
         if (clienteEncontrado) {
             setEditNome(clienteEncontrado.nome || editNome);
             setEditTelefone(clienteEncontrado.telefone || editTelefone);
-            let enderecoFormatado = "";
-            if (
-                clienteEncontrado.endereco &&
-                typeof clienteEncontrado.endereco === "object"
-            ) {
+            let enderecoFormatado = clienteEncontrado.endereco || editEndereco;
+            if (typeof clienteEncontrado.endereco === "object") {
                 const e = clienteEncontrado.endereco;
-                const partes = [
+                enderecoFormatado = [
                     e.logradouro ? `${e.logradouro}` : "",
                     e.numero ? `, ${e.numero}` : "",
                     e.bairro ? ` - ${e.bairro}` : "",
                     e.cidade ? `, ${e.cidade}` : "",
                     e.estado ? `/${e.estado}` : "",
-                ];
-                enderecoFormatado = partes.join("").replace(/^[\s,]+/, "");
-            } else {
-                enderecoFormatado = clienteEncontrado.endereco || editEndereco;
+                ]
+                    .join("")
+                    .replace(/^[\s,]+/, "");
             }
             setEditEndereco(enderecoFormatado);
             alert(`Cliente encontrado no CRM! Dados preenchidos.`);
-        } else {
-            alert("Cliente não encontrado no CRM.");
-        }
+        } else alert("Cliente não encontrado no CRM.");
     };
 
     const aceitarPedido = async (pedido) => {
         try {
             const nomeFinal = editNome || pedido.cliente;
             const telefoneFinal = editTelefone || pedido.telefone;
-
             await updateDoc(doc(db, "pedidos", pedido.id), {
                 status: "agendado",
                 cliente: nomeFinal,
@@ -122,19 +114,17 @@ export default function AbaDashboard({
                 endereco: editEndereco,
                 sinalPago: sinalPago,
             });
-
             setEditandoId(null);
             setEditNome("");
             setEditTelefone("");
             setEditDocumento("");
             setEditEndereco("");
             setSinalPago(false);
-
             if (telefoneFinal) {
                 const statusPag = sinalPago
-                    ? "✅ *Sinal de 50% confirmado!*"
-                    : "⏳ *Aguardando pagamento do sinal.*";
-                const msg = `Olá, *${nomeFinal}*! \n\nSeu pedido foi recebido e agendado na nossa produção!\n\n${statusPag}\n\n📋 *Resumo:* ${formatarItensPedido(pedido.itens)}\n📅 *Para:* ${formatarDataEHora(pedido.dataEntrega)}\n\nObrigado pela preferência!`;
+                    ? "✅ *Sinal confirmado!*"
+                    : "⏳ *Aguardando sinal.*";
+                const msg = `Olá, *${nomeFinal}*! \n\nSeu pedido foi recebido e agendado na produção!\n\n${statusPag}\n\n📋 *Resumo:* ${formatarItensPedido(pedido.itens)}\n📅 *Para:* ${formatarDataEHora(pedido.dataEntrega)}\n\nObrigado!`;
                 window.open(
                     `https://wa.me/${telefoneFinal}?text=${encodeURIComponent(msg)}`,
                     "_blank",
@@ -150,44 +140,35 @@ export default function AbaDashboard({
     const anoAtual = agora.getFullYear();
 
     const pedidosNaTriagem = pedidos.filter(
-        (p) => p.status === "pendente" || p.status === "aguardando_pix",
+        (p) =>
+            (p.status === "pendente" || p.status === "aguardando_pix") &&
+            p.origem !== "mesa" &&
+            p.origem !== "garcom",
     );
     const pedidosDeHoje = pedidos.filter(
         (p) =>
             ["agendado", "em_producao"].includes(p.status) &&
-            isHoje(p.dataEntrega),
+            isHoje(p.dataEntrega) &&
+            p.origem !== "mesa" &&
+            p.origem !== "garcom",
     );
 
     let faturamentoMesGlobal = 0;
-    pedidos.forEach((p) => {
-        const data = new Date(p.criadoEm);
-        if (
-            (p.status === "pronto" || p.status === "entregue") &&
-            data.getMonth() === mesAtual &&
-            data.getFullYear() === anoAtual
-        ) {
-            faturamentoMesGlobal += p.valorTotal || 0;
-        }
-    });
-    comandas.forEach((c) => {
-        if (c.abertaEm) {
-            const data = new Date(c.abertaEm);
-            if (
-                data.getMonth() === mesAtual &&
-                data.getFullYear() === anoAtual
-            ) {
-                let sub = 0;
-                (c.itens || []).forEach((i) => (sub += i.preco * i.qtd_total));
-                faturamentoMesGlobal += sub + sub * 0.1;
-            }
-        }
-    });
-
     let faturamentoHoje = 0;
     let totalVendasHoje = 0;
 
     pedidos.forEach((p) => {
+        if (p.origem === "mesa" || p.origem === "garcom") return; // EVITAR CONTAGEM DUPLA DOS TICKETS DE COZINHA!
         const dataCriacao = p.dataEntrega ? p.dataEntrega : p.criadoEm;
+        const dataObj = new Date(p.criadoEm);
+
+        if (
+            (p.status === "pronto" || p.status === "entregue") &&
+            dataObj.getMonth() === mesAtual &&
+            dataObj.getFullYear() === anoAtual
+        ) {
+            faturamentoMesGlobal += p.valorTotal || 0;
+        }
         if (isHoje(dataCriacao) && p.status !== "cancelado") {
             faturamentoHoje += p.valorTotal || 0;
             totalVendasHoje += 1;
@@ -196,6 +177,17 @@ export default function AbaDashboard({
 
     const mesasAtivas = comandas.filter((c) => c.status !== "fechada").length;
     comandas.forEach((c) => {
+        if (c.abertaEm) {
+            const dataObj = new Date(c.abertaEm);
+            if (
+                dataObj.getMonth() === mesAtual &&
+                dataObj.getFullYear() === anoAtual
+            ) {
+                let sub = 0;
+                (c.itens || []).forEach((i) => (sub += i.preco * i.qtd_total));
+                faturamentoMesGlobal += sub + sub * 0.1;
+            }
+        }
         if (isHoje(c.abertaEm)) {
             let totalComanda = 0;
             (c.itens || []).forEach(
@@ -211,7 +203,11 @@ export default function AbaDashboard({
 
     const contagemProdutos = {};
     pedidos.forEach((p) => {
-        if (p.status !== "cancelado") {
+        if (
+            p.status !== "cancelado" &&
+            p.origem !== "mesa" &&
+            p.origem !== "garcom"
+        ) {
             (p.itens || []).forEach((item) => {
                 if (!contagemProdutos[item.id])
                     contagemProdutos[item.id] = {
@@ -243,37 +239,47 @@ export default function AbaDashboard({
         .slice(0, 5);
 
     // =========================================================
-    // GRÁFICO IMUNE AO FUSO HORÁRIO
+    // GRÁFICO (AGORA 100% FUNCIONAL E SEM BUG DE FUSO HORÁRIO)
     // =========================================================
     const diasSemana = getDiasDaSemana ? getDiasDaSemana() : [];
-
     const dadosGrafico = diasSemana.map((dia) => {
         let totalDia = 0;
-
         pedidos.forEach((p) => {
+            if (p.origem === "mesa" || p.origem === "garcom") return;
             const dataRef = p.dataEntrega ? p.dataEntrega : p.criadoEm;
-            if (
-                dataRef &&
-                new Date(dataRef).toLocaleDateString("en-CA") ===
-                    dia.dataBusca &&
-                p.status !== "cancelado"
-            ) {
-                totalDia += p.valorTotal || 0;
+            if (dataRef && p.status !== "cancelado") {
+                const ano = new Date(dataRef).getFullYear();
+                const mes = String(new Date(dataRef).getMonth() + 1).padStart(
+                    2,
+                    "0",
+                );
+                const diaMes = String(new Date(dataRef).getDate()).padStart(
+                    2,
+                    "0",
+                );
+                if (`${ano}-${mes}-${diaMes}` === dia.dataBusca)
+                    totalDia += p.valorTotal || 0;
             }
         });
-
         comandas.forEach((c) => {
-            if (
-                c.abertaEm &&
-                new Date(c.abertaEm).toLocaleDateString("en-CA") ===
-                    dia.dataBusca
-            ) {
-                let sub = 0;
-                (c.itens || []).forEach((i) => (sub += i.preco * i.qtd_total));
-                totalDia += sub + sub * 0.1;
+            if (c.abertaEm) {
+                const ano = new Date(c.abertaEm).getFullYear();
+                const mes = String(
+                    new Date(c.abertaEm).getMonth() + 1,
+                ).padStart(2, "0");
+                const diaMes = String(new Date(c.abertaEm).getDate()).padStart(
+                    2,
+                    "0",
+                );
+                if (`${ano}-${mes}-${diaMes}` === dia.dataBusca) {
+                    let sub = 0;
+                    (c.itens || []).forEach(
+                        (i) => (sub += i.preco * i.qtd_total),
+                    );
+                    totalDia += sub + sub * 0.1;
+                }
             }
         });
-
         return { nome: dia.nome, valor: totalDia };
     });
 
@@ -417,6 +423,10 @@ export default function AbaDashboard({
                                             className="w-full bg-blue-500 hover:bg-blue-400 transition-all duration-1000 ease-out rounded-t-xl"
                                             style={{
                                                 height: `${alturaPercentual}%`,
+                                                minHeight:
+                                                    dia.valor > 0
+                                                        ? "4px"
+                                                        : "0px",
                                             }}
                                         ></div>
                                     </div>
@@ -445,15 +455,7 @@ export default function AbaDashboard({
                                     className="flex items-center gap-4"
                                 >
                                     <div
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${
-                                            index === 0
-                                                ? "bg-amber-100 text-amber-600"
-                                                : index === 1
-                                                  ? "bg-slate-200 text-slate-600"
-                                                  : index === 2
-                                                    ? "bg-orange-100 text-orange-600"
-                                                    : "bg-slate-50 text-slate-400 border border-slate-100"
-                                        }`}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${index === 0 ? "bg-amber-100 text-amber-600" : index === 1 ? "bg-slate-200 text-slate-600" : index === 2 ? "bg-orange-100 text-orange-600" : "bg-slate-50 text-slate-400 border border-slate-100"}`}
                                     >
                                         {index + 1}
                                     </div>
@@ -527,7 +529,6 @@ export default function AbaDashboard({
                                                             Revisão e Dados
                                                             Fiscais
                                                         </p>
-
                                                         <div>
                                                             <label className="block text-xs font-medium text-slate-600 mb-1">
                                                                 CPF ou CNPJ
@@ -560,7 +561,6 @@ export default function AbaDashboard({
                                                                 </button>
                                                             </div>
                                                         </div>
-
                                                         <input
                                                             type="text"
                                                             value={editNome}
@@ -597,7 +597,6 @@ export default function AbaDashboard({
                                                             placeholder="Endereço de Entrega/Faturamento"
                                                             className="w-full text-sm border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-pink-400 outline-none"
                                                         />
-
                                                         <label className="flex items-center gap-3 py-3 cursor-pointer bg-emerald-50 border border-emerald-100 rounded-lg px-4">
                                                             <input
                                                                 type="checkbox"
@@ -617,7 +616,6 @@ export default function AbaDashboard({
                                                                 Recebido via Pix
                                                             </span>
                                                         </label>
-
                                                         <div className="flex gap-2 pt-2">
                                                             <button
                                                                 onClick={() =>
@@ -734,7 +732,9 @@ export default function AbaDashboard({
                                             "aguardando_pix",
                                             "entregue",
                                             "cancelado",
-                                        ].includes(p.status),
+                                        ].includes(p.status) &&
+                                        p.origem !== "mesa" &&
+                                        p.origem !== "garcom",
                                 );
                                 const isDiaHoje = isHoje(
                                     dia.dataBusca + "T00:00",

@@ -8,6 +8,7 @@ import {
     Image as ImageIcon,
     TrendingUp,
     Lock,
+    Package,
 } from "lucide-react";
 import {
     doc,
@@ -27,164 +28,54 @@ export default function AbaCardapio({
     produtos,
     formatarDinheiro,
 }) {
-    // ==========================================
-    // ESTADOS
-    // ==========================================
     const [editandoProdutoId, setEditandoProdutoId] = useState(null);
     const [produtoImagemAtual, setProdutoImagemAtual] = useState("");
     const [novoNome, setNovoNome] = useState("");
     const [novoPreco, setNovoPreco] = useState("");
-    const [novoCusto, setNovoCusto] = useState(""); // NOVO ESTADO: Custo
+    const [novoCusto, setNovoCusto] = useState("");
     const [novaDescricao, setNovaDescricao] = useState("");
     const [novaCategoria, setNovaCategoria] = useState("");
     const [novoNcm, setNovoNcm] = useState("");
     const [imagemArquivo, setImagemArquivo] = useState(null);
     const [salvandoProduto, setSalvandoProduto] = useState(false);
+
+    // -> NOVO CONTROLE DE INSUMOS
+    const [tipoCadastro, setTipoCadastro] = useState("venda"); // 'venda' ou 'insumo'
     const [novoAtivo, setNovoAtivo] = useState(true);
 
     const [categoriasDaLoja, setCategoriasDaLoja] = useState([]);
+    const [editandoCategoriaId, setEditandoCategoriaId] = useState(null);
+    const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
+    const [salvandoCategoria, setSalvandoCategoria] = useState(false);
 
-    // Verifica se o produto a ser editado tem o custo bloqueado pelo Estoque Automático
-    const produtoSendoEditado = produtos.find(
-        (p) => p.id === editandoProdutoId,
-    );
-    const custoBloqueadoPeloEstoque = produtoSendoEditado?.controlarEstoque;
-
-    // ==========================================
-    // BUSCAR CATEGORIAS DINÂMICAS
-    // ==========================================
     useEffect(() => {
+        if (!nomeDaLoja) return;
         const q = query(
             collection(db, "categorias"),
             where("loja", "==", nomeDaLoja),
         );
-        return onSnapshot(q, (snapshot) => {
-            const cats = snapshot.docs.map((doc) => doc.data().nome);
-            const listaFinal = cats.length > 0 ? cats : ["Geral"];
-            listaFinal.sort((a, b) => a.localeCompare(b));
-
-            setCategoriasDaLoja(listaFinal);
-
-            if (!novaCategoria) {
-                setNovaCategoria(listaFinal[0]);
-            }
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const catArr = snapshot.docs
+                .map((doc) => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => a.ordem - b.ordem);
+            setCategoriasDaLoja(catArr);
         });
-    }, [nomeDaLoja, novaCategoria]);
+        return () => unsubscribe();
+    }, [nomeDaLoja]);
 
-    // ==========================================
-    // CRIAR NOVA CATEGORIA PELO SELECT
-    // ==========================================
-    const handleCategoriaChange = async (e) => {
-        const valorSelecionado = e.target.value;
-
-        if (valorSelecionado === "NOVA_CATEGORIA") {
-            const novaCat = window.prompt("Digite o nome da nova categoria:");
-
-            if (novaCat && novaCat.trim() !== "") {
-                const nomeFormatado = novaCat.trim();
-                try {
-                    await addDoc(collection(db, "categorias"), {
-                        loja: nomeDaLoja,
-                        nome: nomeFormatado,
-                    });
-                    setNovaCategoria(nomeFormatado);
-                } catch (error) {
-                    console.error("Erro:", error);
-                    alert("Erro ao salvar a nova categoria.");
-                }
-            } else {
-                setNovaCategoria(categoriasDaLoja[0]);
-            }
-        } else {
-            setNovaCategoria(valorSelecionado);
-        }
-    };
-
-    // ==========================================
-    // FUNÇÕES DO PRODUTO
-    // ==========================================
-    const salvarProduto = async (e) => {
-        e.preventDefault();
-        if (!novoNome || !novoPreco) return alert("Preencha nome e preço");
-        setSalvandoProduto(true);
-
-        try {
-            let urlDaFoto = editandoProdutoId
-                ? produtoImagemAtual
-                : "https://placehold.co/400?text=Sem+Foto";
-
-            if (imagemArquivo) {
-                const imagemComprimida = await imageCompression(imagemArquivo, {
-                    maxSizeMB: 0.3,
-                    maxWidthOrHeight: 800,
-                });
-                const formData = new FormData();
-                formData.append("file", imagemComprimida);
-                formData.append("upload_preset", "doceapp_preset");
-                const resposta = await fetch(
-                    "https://api.cloudinary.com/v1_1/drm8oe5aa/image/upload",
-                    { method: "POST", body: formData },
-                );
-                urlDaFoto = (await resposta.json()).secure_url;
-            }
-
-            const dadosProduto = {
-                loja: nomeDaLoja,
-                nome: novoNome,
-                preco: parseFloat(novoPreco),
-                descricao: novaDescricao,
-                categoria: novaCategoria || categoriasDaLoja[0],
-                ncm: novoNcm,
-                imagem: urlDaFoto,
-                ativo: novoAtivo,
-                atualizadoEm: new Date().toISOString(),
-            };
-
-            // Se NÃO estiver bloqueado pelo estoque automático, atualiza o custo médio manual
-            if (!custoBloqueadoPeloEstoque) {
-                dadosProduto.custoMedio = parseFloat(novoCusto) || 0;
-            }
-
-            if (editandoProdutoId) {
-                await updateDoc(
-                    doc(db, "produtos", editandoProdutoId),
-                    dadosProduto,
-                );
-                alert("Produto atualizado!");
-            } else {
-                // Produto novo nasce com esses campos extras
-                dadosProduto.controlarEstoque = false;
-                dadosProduto.estoqueAtual = 0;
-                await addDoc(collection(db, "produtos"), dadosProduto);
-                alert("Produto criado!");
-            }
-
-            cancelarEdicaoProduto();
-        } catch (erro) {
-            console.error(erro);
-            alert("Erro ao salvar produto.");
-        } finally {
-            setSalvandoProduto(false);
-        }
-    };
-
-    const prepararEdicaoProduto = (produto) => {
+    const iniciarEdicaoProduto = (produto) => {
         setEditandoProdutoId(produto.id);
         setNovoNome(produto.nome);
-        setNovoPreco(produto.preco);
-        setNovoCusto(produto.custoMedio || ""); // Carrega o custo atual
-        setNovaDescricao(produto.descricao);
-
-        setNovaCategoria(
-            categoriasDaLoja.includes(produto.categoria)
-                ? produto.categoria
-                : categoriasDaLoja[0],
-        );
-
+        setNovoPreco(produto.preco || "");
+        setNovoCusto(produto.custo || "");
+        setNovaDescricao(produto.descricao || "");
+        setNovaCategoria(produto.categoria || "");
         setNovoNcm(produto.ncm || "");
-        setNovoAtivo(produto.ativo);
-        setProdutoImagemAtual(produto.imagem);
+        setProdutoImagemAtual(produto.imagem || "");
+        setNovoAtivo(produto.ativo !== false);
+        setTipoCadastro(produto.ativo === false ? "insumo" : "venda");
         setImagemArquivo(null);
+        window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const cancelarEdicaoProduto = () => {
@@ -193,346 +84,398 @@ export default function AbaCardapio({
         setNovoPreco("");
         setNovoCusto("");
         setNovaDescricao("");
-        setNovaCategoria(categoriasDaLoja[0] || "");
+        setNovaCategoria("");
         setNovoNcm("");
-        setNovoAtivo(true);
-        setImagemArquivo(null);
         setProdutoImagemAtual("");
+        setImagemArquivo(null);
+        setNovoAtivo(true);
+        setTipoCadastro("venda");
+    };
+
+    const salvarProduto = async (e) => {
+        e.preventDefault();
+        if (!novoNome || (!novoPreco && tipoCadastro === "venda"))
+            return alert("Preencha o nome e o preço de venda.");
+        setSalvandoProduto(true);
+
+        try {
+            let urlFinalImagem = produtoImagemAtual;
+            if (imagemArquivo) {
+                const imgComprimida = await imageCompression(imagemArquivo, {
+                    maxSizeMB: 0.3,
+                    maxWidthOrHeight: 800,
+                });
+                const formData = new FormData();
+                formData.append("file", imgComprimida);
+                formData.append("upload_preset", "doceapp_preset");
+                const resposta = await fetch(
+                    "https://api.cloudinary.com/v1_1/drm8oe5aa/image/upload",
+                    { method: "POST", body: formData },
+                );
+                const dadosCloudinary = await resposta.json();
+                urlFinalImagem = dadosCloudinary.secure_url;
+            }
+
+            const dadosProduto = {
+                loja: nomeDaLoja,
+                nome: novoNome,
+                preco:
+                    tipoCadastro === "insumo" ? 0 : parseFloat(novoPreco || 0),
+                custo: parseFloat(novoCusto || 0),
+                descricao: novaDescricao,
+                categoria: novaCategoria,
+                ncm: novoNcm,
+                imagem: urlFinalImagem,
+                ativo: tipoCadastro === "venda" ? novoAtivo : false, // Se for insumo, NUNCA fica ativo no PDV
+                atualizadoEm: new Date().toISOString(),
+            };
+
+            if (editandoProdutoId) {
+                await updateDoc(
+                    doc(db, "produtos", editandoProdutoId),
+                    dadosProduto,
+                );
+                alert("Produto atualizado com sucesso!");
+            } else {
+                dadosProduto.estoqueAtual = 0;
+                await addDoc(collection(db, "produtos"), dadosProduto);
+                alert("Novo produto adicionado ao sistema!");
+            }
+            cancelarEdicaoProduto();
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao salvar produto.");
+        } finally {
+            setSalvandoProduto(false);
+        }
     };
 
     const apagarProduto = async (id) => {
-        if (window.confirm("Deseja mesmo apagar este produto?"))
+        if (window.confirm("Apagar este produto permanentemente?"))
             await deleteDoc(doc(db, "produtos", id));
     };
 
-    const alternarStatus = async (id, statusAtual) =>
-        updateDoc(doc(db, "produtos", id), { ativo: !statusAtual });
-
     return (
-        <div className="animate-in fade-in duration-300 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Formulário Novo/Editar Produto */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
-                <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-2">
-                    {editandoProdutoId ? (
-                        <Edit className="text-pink-600" />
-                    ) : (
-                        <Plus className="text-pink-600" />
-                    )}
-                    {editandoProdutoId ? "Editar Produto" : "Novo Produto"}
-                </h3>
-                <form onSubmit={salvarProduto} className="space-y-5">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">
-                            Categoria
-                        </label>
-                        <select
-                            value={novaCategoria}
-                            onChange={handleCategoriaChange}
-                            className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none bg-white text-slate-900"
-                        >
-                            {categoriasDaLoja.map((cat) => (
-                                <option key={cat} value={cat}>
-                                    {cat}
-                                </option>
-                            ))}
-                            <option disabled>──────────</option>
-                            <option
-                                value="NOVA_CATEGORIA"
-                                className="font-bold text-pink-600"
-                            >
-                                ➕ Adicionar nova categoria...
-                            </option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">
-                            Nome do Produto
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            value={novoNome}
-                            onChange={(e) => setNovoNome(e.target.value)}
-                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
-                        />
-                    </div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in duration-300">
+            {/* LADO ESQUERDO: Formulário de Produto/Insumo */}
+            <div className="xl:col-span-1 space-y-6">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 sticky top-6">
+                    <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                        {editandoProdutoId ? (
+                            <Edit className="text-blue-500" />
+                        ) : (
+                            <Plus className="text-emerald-500" />
+                        )}
+                        {editandoProdutoId ? "Editar Registo" : "Novo Registo"}
+                    </h2>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-600 mb-1">
-                                Preço Final (R$)
-                            </label>
-                            <input
-                                type="number"
-                                required
-                                step="0.01"
-                                value={novoPreco}
-                                onChange={(e) => setNovoPreco(e.target.value)}
-                                className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none font-bold text-slate-800"
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center justify-between">
-                                Custo (R$)
-                                {custoBloqueadoPeloEstoque && (
-                                    <Lock
-                                        size={12}
-                                        className="text-amber-500"
-                                        title="Calculado via Estoque Automático"
-                                    />
-                                )}
-                            </label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                disabled={custoBloqueadoPeloEstoque}
-                                value={novoCusto}
-                                onChange={(e) => setNovoCusto(e.target.value)}
-                                placeholder="0.00"
-                                className={`w-full border p-3 rounded-xl outline-none font-bold transition-colors ${custoBloqueadoPeloEstoque ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed" : "bg-white border-slate-200 focus:ring-2 focus:ring-pink-400 text-slate-900"}`}
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label
-                            className="block text-sm font-medium text-slate-600 mb-1"
-                            title="Nomenclatura Comum do Mercosul"
-                        >
-                            NCM (Fiscal)
-                        </label>
-                        <input
-                            type="text"
-                            maxLength="8"
-                            value={novoNcm}
-                            onChange={(e) =>
-                                setNovoNcm(e.target.value.replace(/\D/g, ""))
-                            }
-                            placeholder="Ex: 19059090"
-                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1 flex justify-between">
-                            <span>Foto Principal</span>
-                            {editandoProdutoId && produtoImagemAtual && (
-                                <span className="text-xs text-pink-600 font-bold">
-                                    Imagem já salva
-                                </span>
-                            )}
-                        </label>
-                        <div className="border border-slate-200 p-2 rounded-xl bg-slate-50 flex items-center">
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) =>
-                                    setImagemArquivo(e.target.files[0])
-                                }
-                                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-pink-100 file:text-pink-700 hover:file:bg-pink-200 cursor-pointer text-slate-700"
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">
-                            Descrição
-                        </label>
-                        <textarea
-                            value={novaDescricao}
-                            onChange={(e) => setNovaDescricao(e.target.value)}
-                            className="w-full bg-white text-slate-900 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-400 focus:outline-none"
-                            rows="3"
-                        ></textarea>
-                    </div>
-
-                    <label className="flex items-center gap-3 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <input
-                            type="checkbox"
-                            checked={novoAtivo}
-                            onChange={(e) => setNovoAtivo(e.target.checked)}
-                            className="w-5 h-5 accent-pink-600"
-                        />
-                        <span className="font-medium text-slate-700">
-                            Visível no Catálogo Público
-                        </span>
-                    </label>
-
-                    <div className="flex gap-2">
-                        <button
-                            type="submit"
-                            disabled={salvandoProduto}
-                            className={`flex-1 text-white font-bold py-4 rounded-xl transition-all flex justify-center items-center gap-2 ${salvandoProduto ? "bg-slate-400" : "bg-slate-900 hover:bg-pink-600"}`}
-                        >
-                            <Save size={20} />{" "}
-                            {salvandoProduto
-                                ? "Salvando..."
-                                : editandoProdutoId
-                                  ? "Atualizar Produto"
-                                  : "Criar Produto"}
-                        </button>
-                        {editandoProdutoId && (
+                    <form onSubmit={salvarProduto} className="space-y-4">
+                        {/* NOVO: TIPO DE CADASTRO */}
+                        <div className="bg-slate-50 p-1.5 rounded-xl flex gap-1 mb-4 border border-slate-100">
                             <button
                                 type="button"
-                                onClick={cancelarEdicaoProduto}
-                                className="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-all"
+                                onClick={() => setTipoCadastro("venda")}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${tipoCadastro === "venda" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
                             >
-                                Cancelar
+                                Produto (Cardápio)
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setTipoCadastro("insumo")}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${tipoCadastro === "insumo" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+                            >
+                                Apenas Insumo
+                            </button>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                {tipoCadastro === "venda"
+                                    ? "Nome do Produto"
+                                    : "Nome do Insumo (Ex: Farinha)"}
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                value={novoNome}
+                                onChange={(e) => setNovoNome(e.target.value)}
+                                className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                            />
+                        </div>
+
+                        {tipoCadastro === "venda" && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                        Preço Final
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        required
+                                        value={novoPreco}
+                                        onChange={(e) =>
+                                            setNovoPreco(e.target.value)
+                                        }
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none font-black text-emerald-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                        Custo Base (R$)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={novoCusto}
+                                        onChange={(e) =>
+                                            setNovoCusto(e.target.value)
+                                        }
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-red-400 outline-none font-medium text-red-600"
+                                    />
+                                </div>
+                            </div>
                         )}
-                    </div>
-                </form>
+
+                        {tipoCadastro === "venda" && (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                        Categoria
+                                    </label>
+                                    <select
+                                        value={novaCategoria}
+                                        onChange={(e) =>
+                                            setNovaCategoria(e.target.value)
+                                        }
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                    >
+                                        <option value="">Sem Categoria</option>
+                                        {categoriasDaLoja.map((c) => (
+                                            <option key={c.id} value={c.nome}>
+                                                {c.nome}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                        Descrição (Cardápio)
+                                    </label>
+                                    <textarea
+                                        value={novaDescricao}
+                                        onChange={(e) =>
+                                            setNovaDescricao(e.target.value)
+                                        }
+                                        rows="3"
+                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                        Foto do Produto
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) =>
+                                            setImagemArquivo(e.target.files[0])
+                                        }
+                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                                    />
+                                </div>
+
+                                <label
+                                    className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${novoAtivo ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={novoAtivo}
+                                        onChange={(e) =>
+                                            setNovoAtivo(e.target.checked)
+                                        }
+                                        className="w-5 h-5 accent-emerald-600"
+                                    />
+                                    <span
+                                        className={`font-bold text-sm ${novoAtivo ? "text-emerald-800" : "text-slate-600"}`}
+                                    >
+                                        Visível no Catálogo para Clientes
+                                    </span>
+                                </label>
+                            </>
+                        )}
+
+                        <div className="pt-4 flex gap-2">
+                            {editandoProdutoId && (
+                                <button
+                                    type="button"
+                                    onClick={cancelarEdicaoProduto}
+                                    className="px-4 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition"
+                                >
+                                    Cancelar
+                                </button>
+                            )}
+                            <button
+                                type="submit"
+                                disabled={salvandoProduto}
+                                className={`flex-1 py-3 rounded-xl font-bold flex justify-center items-center gap-2 text-white transition shadow-md active:scale-95 ${salvandoProduto ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
+                            >
+                                <Save size={20} />{" "}
+                                {salvandoProduto
+                                    ? "A guardar..."
+                                    : "Salvar no Sistema"}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
 
-            {/* Lista de Produtos */}
-            <div className="lg:col-span-2 space-y-4">
-                {produtos.length === 0 ? (
-                    <div className="bg-white p-12 rounded-3xl text-center border border-slate-100">
-                        <ShoppingBag
-                            size={48}
-                            className="mx-auto text-slate-300 mb-4"
-                        />
-                        <h3 className="text-xl font-bold text-slate-600">
-                            Nenhum produto cadastrado
-                        </h3>
-                        <p className="text-slate-400 mt-2">
-                            Comece a adicionar os produtos da loja.
-                        </p>
-                    </div>
-                ) : (
-                    produtos
-                        .sort((a, b) =>
-                            (a.categoria || "").localeCompare(
-                                b.categoria || "",
-                            ),
-                        )
-                        .map((p) => {
-                            // CÁLCULO FINANCEIRO DO PRODUTO
-                            const custo = p.custoMedio || 0;
-                            const lucroBruto = p.preco - custo;
-                            const margem =
-                                p.preco > 0
-                                    ? ((lucroBruto / p.preco) * 100).toFixed(1)
+            {/* LADO DIREITO: Lista de Produtos e Insumos */}
+            <div className="xl:col-span-2 space-y-6">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                        <ShoppingBag className="text-indigo-500" /> Banco de
+                        Produtos & Insumos
+                    </h2>
+
+                    <div className="space-y-4">
+                        {produtos.length === 0 ? (
+                            <p className="text-center text-slate-400 italic py-10">
+                                Nenhum registo efetuado.
+                            </p>
+                        ) : (
+                            produtos.map((produto) => {
+                                const isVenda = produto.ativo !== false;
+                                const lucroBruto = isVenda
+                                    ? (produto.preco || 0) -
+                                      (produto.custo || 0)
                                     : 0;
 
-                            return (
-                                <div
-                                    key={p.id}
-                                    className={`bg-white p-5 rounded-2xl border transition-all ${p.ativo ? "border-slate-100 shadow-sm hover:border-pink-200" : "border-red-100 opacity-60 grayscale-[30%]"}`}
-                                >
-                                    <div className="flex flex-col sm:flex-row gap-5 items-start">
-                                        <img
-                                            src={p.imagem}
-                                            alt={p.nome}
-                                            className="w-24 h-24 rounded-2xl object-cover bg-slate-100"
-                                        />
-                                        <div className="flex-1 w-full">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs px-2.5 py-1 rounded-md font-bold uppercase bg-slate-100 text-slate-600">
-                                                        {p.categoria || "Geral"}
-                                                    </span>
-                                                    <span
-                                                        className={`text-[10px] px-2.5 py-1 rounded-md font-bold uppercase ${p.ativo ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
-                                                    >
-                                                        {p.ativo
-                                                            ? "Ativo"
-                                                            : "Pausado"}
-                                                    </span>
+                                return (
+                                    <div
+                                        key={produto.id}
+                                        className={`flex flex-col md:flex-row gap-4 p-4 border rounded-2xl transition-all hover:shadow-md ${isVenda ? "bg-white border-slate-100" : "bg-slate-50 border-slate-200 border-dashed"}`}
+                                    >
+                                        {isVenda && produto.imagem ? (
+                                            <img
+                                                src={produto.imagem}
+                                                alt={produto.nome}
+                                                className="w-full md:w-24 h-40 md:h-24 object-cover rounded-xl shadow-sm"
+                                            />
+                                        ) : (
+                                            <div className="w-full md:w-24 h-24 bg-slate-100 rounded-xl flex items-center justify-center text-slate-300">
+                                                {isVenda ? (
+                                                    <ImageIcon size={24} />
+                                                ) : (
+                                                    <Package size={24} />
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="flex-1 flex flex-col justify-between">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                                        {produto.nome}
+                                                        {!isVenda && (
+                                                            <span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-md uppercase tracking-widest font-black">
+                                                                Insumo
+                                                            </span>
+                                                        )}
+                                                    </h3>
+                                                    {isVenda && (
+                                                        <p className="text-xs text-slate-400 font-medium">
+                                                            {produto.categoria ||
+                                                                "Sem Categoria"}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() =>
-                                                            prepararEdicaoProduto(
-                                                                p,
+                                                            iniciarEdicaoProduto(
+                                                                produto,
                                                             )
                                                         }
-                                                        className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                                                        title="Editar"
+                                                        className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition"
                                                     >
-                                                        <Edit size={16} />
+                                                        <Edit size={18} />
                                                     </button>
                                                     <button
                                                         onClick={() =>
-                                                            alternarStatus(
-                                                                p.id,
-                                                                p.ativo,
+                                                            apagarProduto(
+                                                                produto.id,
                                                             )
                                                         }
-                                                        className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition"
-                                                        title={
-                                                            p.ativo
-                                                                ? "Pausar"
-                                                                : "Ativar"
-                                                        }
+                                                        className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition"
                                                     >
-                                                        <Lock size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            apagarProduto(p.id)
-                                                        }
-                                                        className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition"
-                                                        title="Excluir"
-                                                    >
-                                                        <Trash2 size={16} />
+                                                        <Trash2 size={18} />
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <h4 className="font-bold text-xl text-slate-800 line-clamp-1">
-                                                {p.nome}
-                                            </h4>
-
-                                            {/* MINI-DASHBOARD FINANCEIRO DO PRODUTO */}
-                                            <div className="grid grid-cols-3 gap-2 mt-4 bg-slate-50 rounded-xl border border-slate-200 divide-x divide-slate-200">
-                                                <div className="p-2 text-center">
-                                                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider mb-1">
-                                                        Custo Médio
-                                                    </p>
-                                                    <p className="font-bold text-sm text-slate-700">
-                                                        {formatarDinheiro(
-                                                            custo,
-                                                        )}
+                                            {isVenda ? (
+                                                <div className="flex flex-wrap gap-4 mt-auto border-t border-slate-100 pt-3">
+                                                    <div>
+                                                        <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">
+                                                            Preço de Venda
+                                                        </p>
+                                                        <p className="font-black text-emerald-600">
+                                                            {formatarDinheiro(
+                                                                produto.preco,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">
+                                                            Custo (Produção)
+                                                        </p>
+                                                        <p className="font-black text-red-500">
+                                                            {formatarDinheiro(
+                                                                produto.custo,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">
+                                                            Lucro Bruto
+                                                        </p>
+                                                        <p className="font-black text-blue-600">
+                                                            <TrendingUp
+                                                                size={12}
+                                                                className="inline mr-1"
+                                                            />
+                                                            {formatarDinheiro(
+                                                                lucroBruto,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-auto border-t border-slate-200 pt-3">
+                                                    <p className="text-xs font-medium text-slate-500">
+                                                        Este item é de uso
+                                                        interno. Seu custo atual
+                                                        é de{" "}
+                                                        <strong className="text-slate-800">
+                                                            {formatarDinheiro(
+                                                                produto.custo,
+                                                            )}
+                                                        </strong>{" "}
+                                                        e ele não aparece para
+                                                        clientes.
                                                     </p>
                                                 </div>
-                                                <div className="p-2 text-center bg-white">
-                                                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider mb-1">
-                                                        Preço Venda
-                                                    </p>
-                                                    <p className="font-black text-sm text-slate-900">
-                                                        {formatarDinheiro(
-                                                            p.preco,
-                                                        )}
-                                                    </p>
-                                                </div>
-                                                <div
-                                                    className={`p-2 text-center ${margem > 40 ? "bg-emerald-50" : margem > 20 ? "bg-blue-50" : "bg-red-50"}`}
-                                                >
-                                                    <p
-                                                        className={`text-[9px] uppercase font-black tracking-wider mb-1 ${margem > 40 ? "text-emerald-600" : margem > 20 ? "text-blue-600" : "text-red-600"}`}
-                                                    >
-                                                        Lucro ({margem}%)
-                                                    </p>
-                                                    <p
-                                                        className={`font-black text-sm ${margem > 40 ? "text-emerald-700" : margem > 20 ? "text-blue-700" : "text-red-700"}`}
-                                                    >
-                                                        <TrendingUp
-                                                            size={12}
-                                                            className="inline mr-1"
-                                                        />
-                                                        {formatarDinheiro(
-                                                            lucroBruto,
-                                                        )}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })
-                )}
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

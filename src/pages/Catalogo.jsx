@@ -15,6 +15,7 @@ import {
 import {
     collection,
     addDoc,
+    getDoc,
     query,
     where,
     onSnapshot,
@@ -218,12 +219,13 @@ export default function Catalogo() {
             currency: "BRL",
         }).format(valor);
 
+    // ==========================================
+    // FUNÇÃO PRINCIPAL DE FECHAMENTO (CORRIGIDA)
+    // ==========================================
     const finalizarPedido = async () => {
         setProcessandoPedido(true);
 
-        // =========================================================
         // A CATRACA DO STOCK (Verifica todos os itens antes de enviar)
-        // =========================================================
         for (const item of carrinho) {
             const produtoInfo = produtosDaLoja.find((p) => p.id === item.id);
             if (produtoInfo?.controlarEstoque) {
@@ -237,7 +239,9 @@ export default function Catalogo() {
             }
         }
 
-        // Continua com o fluxo se o stock for válido...
+        // =========================================================
+        // FLUXO 1: PEDIDO NA MESA (QR CODE)
+        // =========================================================
         if (numeroDaMesa) {
             try {
                 const identificadorMesa = `Mesa ${numeroDaMesa}`;
@@ -295,28 +299,86 @@ export default function Catalogo() {
                     });
                 }
 
-                // DAR BAIXA NO STOCK AUTOMÁTICA
+                // CRIAR TICKET NA COZINHA (KDS) PARA AUTOATENDIMENTO
+                await addDoc(collection(db, "pedidos"), {
+                    loja: nomeDaLoja,
+                    cliente: identificadorMesa,
+                    origem: "mesa",
+                    telefone: "QR Code Autoatendimento",
+                    itens: carrinho,
+                    valorTotal: valorTotal,
+                    status: "agendado",
+                    criadoEm: new Date().toISOString(),
+                });
+
+                // MOTOR DE BAIXA INTELIGENTE (MESA)
                 for (const item of carrinho) {
-                    const produtoInfo = produtosDaLoja.find(
-                        (p) => p.id === item.id,
-                    );
-                    if (produtoInfo?.controlarEstoque) {
-                        const novoEstoque =
-                            (produtoInfo.estoqueAtual || 0) - item.quantidade;
-                        await updateDoc(doc(db, "produtos", produtoInfo.id), {
-                            estoqueAtual: novoEstoque,
-                        });
-                        await addDoc(collection(db, "movimentacoes_estoque"), {
-                            loja: nomeDaLoja,
-                            produtoId: produtoInfo.id,
-                            produtoNome: produtoInfo.nome,
-                            tipo: "saida",
-                            quantidade: item.quantidade,
-                            estoqueAnterior: produtoInfo.estoqueAtual || 0,
-                            estoqueNovo: novoEstoque,
-                            motivo: `Autoatendimento (Mesa ${numeroDaMesa})`,
-                            data: new Date().toISOString(),
-                        });
+                    const prodRef = doc(db, "produtos", item.id);
+                    const prodSnap = await getDoc(prodRef);
+
+                    if (prodSnap.exists()) {
+                        const prodDB = prodSnap.data();
+
+                        if (
+                            prodDB.fichaTecnica &&
+                            prodDB.fichaTecnica.length > 0
+                        ) {
+                            for (const ing of prodDB.fichaTecnica) {
+                                const insumoRef = doc(
+                                    db,
+                                    "produtos",
+                                    ing.id_insumo,
+                                );
+                                const insumoSnap = await getDoc(insumoRef);
+                                if (insumoSnap.exists()) {
+                                    const insumoDB = insumoSnap.data();
+                                    const qtdDescontar =
+                                        ing.quantidade * item.quantidade;
+                                    const novoEstoque =
+                                        (insumoDB.estoqueAtual || 0) -
+                                        qtdDescontar;
+
+                                    await updateDoc(insumoRef, {
+                                        estoqueAtual: novoEstoque,
+                                    });
+                                    await addDoc(
+                                        collection(db, "movimentacoes_estoque"),
+                                        {
+                                            loja: nomeDaLoja,
+                                            produtoId: insumoSnap.id,
+                                            produtoNome: insumoDB.nome,
+                                            tipo: "saida",
+                                            quantidade: qtdDescontar,
+                                            estoqueAnterior:
+                                                insumoDB.estoqueAtual || 0,
+                                            estoqueNovo: novoEstoque,
+                                            motivo: `Autoatendimento (${identificadorMesa}) - Utilizado em ${item.quantidade}x ${prodDB.nome}`,
+                                            data: new Date().toISOString(),
+                                        },
+                                    );
+                                }
+                            }
+                        } else if (prodDB.controlarEstoque !== false) {
+                            const novoEstoque =
+                                (prodDB.estoqueAtual || 0) - item.quantidade;
+                            await updateDoc(prodRef, {
+                                estoqueAtual: novoEstoque,
+                            });
+                            await addDoc(
+                                collection(db, "movimentacoes_estoque"),
+                                {
+                                    loja: nomeDaLoja,
+                                    produtoId: prodSnap.id,
+                                    produtoNome: prodDB.nome,
+                                    tipo: "saida",
+                                    quantidade: item.quantidade,
+                                    estoqueAnterior: prodDB.estoqueAtual || 0,
+                                    estoqueNovo: novoEstoque,
+                                    motivo: `Autoatendimento (${identificadorMesa})`,
+                                    data: new Date().toISOString(),
+                                },
+                            );
+                        }
                     }
                 }
 
@@ -331,7 +393,9 @@ export default function Catalogo() {
             return;
         }
 
-        // Fluxo Delivery Padrão (Sem Mesa)
+        // =========================================================
+        // FLUXO 2: DELIVERY (SEM MESA)
+        // =========================================================
         if (!nomeCliente || !telefoneCliente) {
             setProcessandoPedido(false);
             return alert(
@@ -363,28 +427,65 @@ export default function Catalogo() {
                 criadoEm: new Date().toISOString(),
             });
 
-            // DAR BAIXA NO STOCK PARA DELIVERY
+            // MOTOR DE BAIXA INTELIGENTE (DELIVERY)
             for (const item of carrinho) {
-                const produtoInfo = produtosDaLoja.find(
-                    (p) => p.id === item.id,
-                );
-                if (produtoInfo?.controlarEstoque) {
-                    const novoEstoque =
-                        (produtoInfo.estoqueAtual || 0) - item.quantidade;
-                    await updateDoc(doc(db, "produtos", produtoInfo.id), {
-                        estoqueAtual: novoEstoque,
-                    });
-                    await addDoc(collection(db, "movimentacoes_estoque"), {
-                        loja: nomeDaLoja,
-                        produtoId: produtoInfo.id,
-                        produtoNome: produtoInfo.nome,
-                        tipo: "saida",
-                        quantidade: item.quantidade,
-                        estoqueAnterior: produtoInfo.estoqueAtual || 0,
-                        estoqueNovo: novoEstoque,
-                        motivo: `Delivery / Encomenda (${nomeCliente})`,
-                        data: new Date().toISOString(),
-                    });
+                const prodRef = doc(db, "produtos", item.id);
+                const prodSnap = await getDoc(prodRef);
+
+                if (prodSnap.exists()) {
+                    const prodDB = prodSnap.data();
+
+                    if (prodDB.fichaTecnica && prodDB.fichaTecnica.length > 0) {
+                        for (const ing of prodDB.fichaTecnica) {
+                            const insumoRef = doc(
+                                db,
+                                "produtos",
+                                ing.id_insumo,
+                            );
+                            const insumoSnap = await getDoc(insumoRef);
+                            if (insumoSnap.exists()) {
+                                const insumoDB = insumoSnap.data();
+                                const qtdDescontar =
+                                    ing.quantidade * item.quantidade;
+                                const novoEstoque =
+                                    (insumoDB.estoqueAtual || 0) - qtdDescontar;
+
+                                await updateDoc(insumoRef, {
+                                    estoqueAtual: novoEstoque,
+                                });
+                                await addDoc(
+                                    collection(db, "movimentacoes_estoque"),
+                                    {
+                                        loja: nomeDaLoja,
+                                        produtoId: insumoSnap.id,
+                                        produtoNome: insumoDB.nome,
+                                        tipo: "saida",
+                                        quantidade: qtdDescontar,
+                                        estoqueAnterior:
+                                            insumoDB.estoqueAtual || 0,
+                                        estoqueNovo: novoEstoque,
+                                        motivo: `Delivery (${nomeCliente}) - Utilizado em ${item.quantidade}x ${prodDB.nome}`,
+                                        data: new Date().toISOString(),
+                                    },
+                                );
+                            }
+                        }
+                    } else if (prodDB.controlarEstoque !== false) {
+                        const novoEstoque =
+                            (prodDB.estoqueAtual || 0) - item.quantidade;
+                        await updateDoc(prodRef, { estoqueAtual: novoEstoque });
+                        await addDoc(collection(db, "movimentacoes_estoque"), {
+                            loja: nomeDaLoja,
+                            produtoId: prodSnap.id,
+                            produtoNome: prodDB.nome,
+                            tipo: "saida",
+                            quantidade: item.quantidade,
+                            estoqueAnterior: prodDB.estoqueAtual || 0,
+                            estoqueNovo: novoEstoque,
+                            motivo: `Delivery (${nomeCliente})`,
+                            data: new Date().toISOString(),
+                        });
+                    }
                 }
             }
 
@@ -814,7 +915,6 @@ export default function Catalogo() {
                             <b>Mesa {numeroDaMesa}</b> e já começaram a ser
                             preparados.
                         </p>
-
                         <button
                             onClick={() => {
                                 setMostrarModalSucessoMesa(false);

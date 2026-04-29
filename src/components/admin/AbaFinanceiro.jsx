@@ -124,7 +124,13 @@ export default function AbaFinanceiro({
     // Unificar Pedidos (Delivery), Comandas (Bar) e Despesas
     const transacoesDoMes = [
         ...pedidos
-            .filter((p) => p.status === "entregue" || p.status === "pronto")
+            // -> CORREÇÃO: Ignorar pedidos que vieram do Salão (Ticket da Cozinha), pois já estão na Receita da Comanda!
+            .filter(
+                (p) =>
+                    (p.status === "entregue" || p.status === "pronto") &&
+                    p.origem !== "mesa" &&
+                    p.origem !== "garcom",
+            )
             .map((p) => {
                 const dataRef = p.dataEntrega
                     ? p.dataEntrega.split("T")[0]

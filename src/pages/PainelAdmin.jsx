@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
     Home,
@@ -14,6 +14,8 @@ import {
     MonitorSmartphone,
     Package,
     Lock,
+    BellRing,
+    Printer,
 } from "lucide-react";
 import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
@@ -38,6 +40,16 @@ const paletaTemasAdmin = {
     slate: { bgAtivo: "bg-slate-800", textoAtivo: "text-white" },
 };
 
+// ==========================================
+// FUNÇÕES GLOBAIS DE DATA (BLINDADAS)
+// ==========================================
+const getDateStr = (dateObj) => {
+    const ano = dateObj.getFullYear();
+    const mes = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const dia = String(dateObj.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+};
+
 export default function PainelAdmin() {
     const params = useParams();
     const nomeDaLoja = params.nomeDaLoja?.toLowerCase();
@@ -52,6 +64,65 @@ export default function PainelAdmin() {
     const [membrosEquipe, setMembrosEquipe] = useState([]);
     const [cargoUsuario, setCargoUsuario] = useState("admin");
 
+    const [notificacoes, setNotificacoes] = useState([]);
+    const historicoItensMesa = useRef({});
+
+    // FUNÇÃO DE IMPRESSÃO DO TOAST
+    const imprimirTicketRapido = (dados) => {
+        const janelaImpressao = window.open("", "", "width=300,height=600");
+        let htmlCupom = `
+            <html><head><title>Ticket</title>
+            <style>
+                body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0; padding: 5mm; color: #000; font-size: 14px; }
+                .center { text-align: center; } .bold { font-weight: bold; } hr { border-top: 1px dashed #000; border-bottom: none; margin: 8px 0; }
+            </style>
+            </head><body>
+            <div class="center bold" style="font-size: 18px; margin-bottom: 5px;">NOVO PEDIDO</div>
+            <div class="center">${configLoja?.nomeExibicao || nomeDaLoja}</div><hr/>
+            <div style="font-size: 16px; margin-bottom: 10px;"><b>Cliente:</b> ${dados.cliente}</div>
+        `;
+
+        if (dados.endereco)
+            htmlCupom += `<div style="margin-bottom: 10px;"><b>Endereço:</b> ${dados.endereco}</div>`;
+        if (dados.telefone)
+            htmlCupom += `<div style="margin-bottom: 10px;"><b>WhatsApp:</b> ${dados.telefone}</div>`;
+
+        htmlCupom += `<hr/><div class="bold">ITENS DO PEDIDO:</div><div style="margin-top: 5px;">`;
+        (dados.itens || []).forEach((item) => {
+            htmlCupom += `<div style="margin-bottom: 4px;">${item.quantidade || item.qtd_total}x ${item.nome}</div>`;
+        });
+        htmlCupom += `</div><hr/><div class="center" style="margin-top: 15px;">Emitido em: ${new Date().toLocaleString("pt-BR")}</div></body></html>`;
+
+        janelaImpressao.document.write(htmlCupom);
+        janelaImpressao.document.close();
+        janelaImpressao.focus();
+        setTimeout(() => {
+            janelaImpressao.print();
+            janelaImpressao.close();
+        }, 500);
+    };
+
+    const dispararAlerta = (titulo, texto, dadosAlvo = null) => {
+        const id = Date.now();
+        setNotificacoes((prev) => [...prev, { id, titulo, texto, dadosAlvo }]);
+        try {
+            const audio = new Audio(
+                "https://actions.google.com/sounds/v1/alarms/doorbell.ogg",
+            );
+            audio
+                .play()
+                .catch(() =>
+                    console.log(
+                        "Áudio bloqueado. Interaja com a página primeiro.",
+                    ),
+                );
+        } catch (e) {}
+        setTimeout(
+            () => setNotificacoes((prev) => prev.filter((n) => n.id !== id)),
+            10000,
+        );
+    };
+
     useEffect(() => {
         const unsubscribe = onSnapshot(
             doc(db, "lojas", nomeDaLoja),
@@ -60,24 +131,18 @@ export default function PainelAdmin() {
                     const config = { id: docSnap.id, ...docSnap.data() };
                     setConfigLoja(config);
                     document.title = `${config.nomeExibicao || nomeDaLoja} - Painel Gestor`;
-
-                    // ==========================================
-                    // PROTEÇÃO ANTI-HACKER (URL Direta)
-                    // ==========================================
                     const modulosAtivos = config.modulos || [];
                     if (
                         abaAtiva === "estoque" &&
                         !modulosAtivos.includes("ficha_tecnica")
-                    ) {
+                    )
                         setAbaAtiva("dashboard");
-                    }
                     if (
                         abaAtiva === "kanban" &&
                         config.nicho === "bar_restaurante" &&
                         !modulosAtivos.includes("kds")
-                    ) {
+                    )
                         setAbaAtiva("dashboard");
-                    }
                 }
             },
         );
@@ -85,11 +150,42 @@ export default function PainelAdmin() {
     }, [nomeDaLoja, abaAtiva]);
 
     useEffect(() => {
+        let isInitialPedidos = true;
         const unPedidos = onSnapshot(
             query(collection(db, "pedidos"), where("loja", "==", nomeDaLoja)),
-            (snap) =>
-                setPedidos(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+            (snap) => {
+                setPedidos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+                if (!isInitialPedidos) {
+                    snap.docChanges().forEach((change) => {
+                        if (change.type === "added") {
+                            const data = change.doc.data();
+                            const valorFormatado = new Intl.NumberFormat(
+                                "pt-BR",
+                                { style: "currency", currency: "BRL" },
+                            ).format(data.valorTotal || 0);
+                            if (
+                                data.origem === "mesa" ||
+                                data.origem === "garcom"
+                            ) {
+                                dispararAlerta(
+                                    "🛎️ Pedido para a Cozinha!",
+                                    `${data.cliente} adicionou itens via Autoatendimento ou Garçom.`,
+                                    data,
+                                );
+                            } else {
+                                dispararAlerta(
+                                    "🛵 Novo Pedido Delivery!",
+                                    `O cliente ${data.cliente} enviou um pedido de ${valorFormatado}.`,
+                                    data,
+                                );
+                            }
+                        }
+                    });
+                }
+                isInitialPedidos = false;
+            },
         );
+
         const unProdutos = onSnapshot(
             query(collection(db, "produtos"), where("loja", "==", nomeDaLoja)),
             (snap) =>
@@ -109,18 +205,14 @@ export default function PainelAdmin() {
                     ...d.data(),
                 }));
                 setMembrosEquipe(equipe);
-
                 const emailLogado = auth.currentUser?.email;
                 const usuarioLogado = equipe.find(
                     (m) => m.email === emailLogado,
                 );
-
                 if (usuarioLogado) {
                     setCargoUsuario(usuarioLogado.role);
                     if (usuarioLogado.role === "garcom") setAbaAtiva("garcom");
-                } else {
-                    setCargoUsuario("admin");
-                }
+                } else setCargoUsuario("admin");
             },
         );
 
@@ -142,14 +234,27 @@ export default function PainelAdmin() {
             ? "Nenhum item"
             : itens.map((i) => `${i.quantidade}x ${i.nome}`).join(", ");
 
-    const getDataLocal = (dataIso) => {
-        if (!dataIso) return "";
-        return new Date(dataIso).toLocaleDateString("en-CA");
+    const getDiasDaSemana = () => {
+        const hoje = new Date();
+        const domingo = new Date(
+            hoje.getFullYear(),
+            hoje.getMonth(),
+            hoje.getDate() - hoje.getDay(),
+        );
+        return Array.from({ length: 7 }).map((_, i) => {
+            const d = new Date(domingo);
+            d.setDate(domingo.getDate() + i);
+            return {
+                nome: ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][i],
+                numero: d.getDate(),
+                dataBusca: getDateStr(d),
+            };
+        });
     };
 
     const isHoje = (dataIso) => {
         if (!dataIso) return false;
-        return getDataLocal(dataIso) === new Date().toLocaleDateString("en-CA");
+        return getDateStr(new Date(dataIso)) === getDateStr(new Date());
     };
 
     const formatarDataEHora = (dataIso) => {
@@ -158,32 +263,13 @@ export default function PainelAdmin() {
         return `${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
     };
 
-    const getDiasDaSemana = () => {
-        const hoje = new Date();
-        const domingo = new Date(hoje);
-        domingo.setDate(hoje.getDate() - hoje.getDay());
-        return Array.from({ length: 7 }).map((_, i) => {
-            const d = new Date(domingo);
-            d.setDate(domingo.getDate() + i);
-            return {
-                nome: ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][i],
-                numero: d.getDate(),
-                dataBusca: d.toLocaleDateString("en-CA"),
-            };
-        });
-    };
-
     const navegarPara = (aba) => {
         setAbaAtiva(aba);
         setMenuMobileAberto(false);
     };
-
     const temaAtual =
         paletaTemasAdmin[configLoja?.tema] || paletaTemasAdmin.pink;
 
-    // ==========================================
-    // ACL: GESTÃO DE ACESSO AOS MÓDULOS PREMIUM
-    // ==========================================
     const renderizarMenu = () => {
         if (cargoUsuario === "garcom") {
             return (
@@ -199,31 +285,25 @@ export default function PainelAdmin() {
         const itensComuns = [];
         const modulosAtivos = configLoja?.modulos || [];
 
-        if (cargoUsuario === "admin") {
+        if (cargoUsuario === "admin")
             itensComuns.push({
                 id: "dashboard",
                 icon: <Home size={20} />,
                 label: "Visão Geral",
             });
-        }
-
-        // Lógica para Bar vs Confeitaria
         if (configLoja?.nicho === "bar_restaurante") {
             itensComuns.push({
                 id: "caixa",
                 icon: <MonitorSmartphone size={20} />,
                 label: "Caixa e Comandas",
             });
-            if (cargoUsuario === "admin") {
+            if (cargoUsuario === "admin")
                 itensComuns.push({
                     id: "garcom",
                     icon: <MonitorSmartphone size={20} />,
                     label: "Lançar Pedidos (App)",
                 });
-            }
         }
-
-        // MÓDULO: KDS (Painel Cozinha) -> Padrão para Delivery, Exige Módulo para Bares
         if (
             configLoja?.nicho !== "bar_restaurante" ||
             modulosAtivos.includes("kds")
@@ -234,23 +314,18 @@ export default function PainelAdmin() {
                 label: "Produção (KDS)",
             });
         }
-
         if (cargoUsuario === "admin") {
             itensComuns.push({
                 id: "cardapio",
                 icon: <ShoppingBag size={20} />,
                 label: "Cardápio / Menu",
             });
-
-            // MÓDULO: Ficha Técnica (Estoque)
-            if (modulosAtivos.includes("ficha_tecnica")) {
+            if (modulosAtivos.includes("ficha_tecnica"))
                 itensComuns.push({
                     id: "estoque",
                     icon: <Package size={20} />,
                     label: "Controle de Estoque",
                 });
-            }
-
             itensComuns.push(
                 {
                     id: "clientes",
@@ -283,6 +358,45 @@ export default function PainelAdmin() {
 
     return (
         <div className="min-h-screen bg-slate-50 flex overflow-hidden">
+            {/* NOTIFICAÇÕES GLOBAIS COM BOTÃO DE IMPRIMIR */}
+            <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
+                {notificacoes.map((n) => (
+                    <div
+                        key={n.id}
+                        className="bg-slate-900 text-white p-5 rounded-2xl shadow-2xl w-80 sm:w-96 animate-in slide-in-from-right pointer-events-auto border-l-4 border-amber-500"
+                    >
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-black text-amber-400 flex items-center gap-2">
+                                <BellRing size={16} /> {n.titulo}
+                            </h4>
+                            <button
+                                onClick={() =>
+                                    setNotificacoes((prev) =>
+                                        prev.filter((x) => x.id !== n.id),
+                                    )
+                                }
+                                className="text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-300 font-medium leading-relaxed mb-4">
+                            {n.texto}
+                        </p>
+                        {n.dadosAlvo && (
+                            <button
+                                onClick={() =>
+                                    imprimirTicketRapido(n.dadosAlvo)
+                                }
+                                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-2 transition"
+                            >
+                                <Printer size={14} /> Imprimir Comanda / Ticket
+                            </button>
+                        )}
+                    </div>
+                ))}
+            </div>
+
             {menuMobileAberto && (
                 <div
                     className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
@@ -322,11 +436,8 @@ export default function PainelAdmin() {
                             : "Painel Gestor"}
                     </p>
                 </div>
-
                 <nav className="flex-1 p-6 space-y-1.5 overflow-y-auto">
                     {renderizarMenu()}
-
-                    {/* Propaganda Visual para o lojista comprar mais módulos */}
                     {cargoUsuario === "admin" &&
                         configLoja &&
                         (configLoja.modulos || []).length < 4 && (
@@ -351,7 +462,6 @@ export default function PainelAdmin() {
                                 </p>
                             </div>
                         )}
-
                     {cargoUsuario === "admin" && (
                         <div className="pt-4 mt-2 border-t border-slate-100">
                             <button
@@ -363,7 +473,6 @@ export default function PainelAdmin() {
                         </div>
                     )}
                 </nav>
-
                 <div className="p-6 border-t mt-auto space-y-4">
                     <button
                         onClick={() => {
