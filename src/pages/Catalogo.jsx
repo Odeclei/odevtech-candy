@@ -137,14 +137,9 @@ export default function Catalogo() {
         const unsubscribe = onSnapshot(
             doc(db, "lojas", nomeDaLoja),
             (docSnap) => {
-                if (docSnap.exists()) {
+                if (docSnap.exists())
                     setConfigLoja({ id: docSnap.id, ...docSnap.data() });
-                } else {
-                    setConfigLoja({});
-                }
-                setLoadingConfig(false);
-            },
-            () => {
+                else setConfigLoja({});
                 setLoadingConfig(false);
             },
         );
@@ -152,18 +147,8 @@ export default function Catalogo() {
     }, [nomeDaLoja]);
 
     useEffect(() => {
-        if (configLoja?.nomeExibicao) {
+        if (configLoja?.nomeExibicao)
             document.title = `${configLoja.nomeExibicao} - Catálogo Digital`;
-        }
-        if (configLoja?.logo) {
-            const link =
-                document.querySelector("link[rel*='icon']") ||
-                document.createElement("link");
-            link.type = "image/x-icon";
-            link.rel = "shortcut icon";
-            link.href = configLoja.logo;
-            document.getElementsByTagName("head")[0].appendChild(link);
-        }
     }, [configLoja]);
 
     useEffect(() => {
@@ -172,12 +157,11 @@ export default function Catalogo() {
             where("loja", "==", nomeDaLoja),
             where("ativo", "==", true),
         );
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        return onSnapshot(q, (snap) =>
             setProdutosDaLoja(
-                snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-            );
-        });
-        return () => unsubscribe();
+                snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            ),
+        );
     }, [nomeDaLoja]);
 
     const adicionarAoCarrinho = (produto) => {
@@ -204,43 +188,68 @@ export default function Catalogo() {
                     : item,
             ),
         );
-
     const removerDoCarrinho = (produtoId) =>
         setCarrinho(carrinho.filter((item) => item.id !== produtoId));
-
     const valorTotal = carrinho.reduce(
         (total, item) => total + item.preco * item.quantidade,
         0,
     );
     const totalItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0);
-    const formatarDinheiro = (valor) =>
+    const formatarDinheiro = (v) =>
         new Intl.NumberFormat("pt-BR", {
             style: "currency",
             currency: "BRL",
-        }).format(valor);
+        }).format(v);
 
-    // ==========================================
-    // FUNÇÃO PRINCIPAL DE FECHAMENTO (CORRIGIDA)
-    // ==========================================
     const finalizarPedido = async () => {
         setProcessandoPedido(true);
 
-        // A CATRACA DO STOCK (Verifica todos os itens antes de enviar)
+        // =========================================================
+        // PASSO 1: IDENTIFICAR ITENS SEM STOCK (PARA ENCOMENDA)
+        // =========================================================
+        let itensSemStock = [];
+
         for (const item of carrinho) {
-            const produtoInfo = produtosDaLoja.find((p) => p.id === item.id);
-            if (produtoInfo?.controlarEstoque) {
-                if ((produtoInfo.estoqueAtual || 0) < item.quantidade) {
-                    setProcessandoPedido(false);
-                    alert(
-                        `❌ Desculpe! Temos apenas ${produtoInfo.estoqueAtual || 0} unidades de "${produtoInfo.nome}" disponíveis no momento.`,
-                    );
-                    return;
+            const pInfo = produtosDaLoja.find((p) => p.id === item.id);
+            if (pInfo) {
+                if (pInfo.fichaTecnica && pInfo.fichaTecnica.length > 0) {
+                    for (const ing of pInfo.fichaTecnica) {
+                        const insSnap = await getDoc(
+                            doc(db, "produtos", ing.id_insumo),
+                        );
+                        if (insSnap.exists()) {
+                            if (
+                                (insSnap.data().estoqueAtual || 0) <
+                                ing.quantidade * item.quantidade
+                            ) {
+                                if (!itensSemStock.includes(pInfo.nome))
+                                    itensSemStock.push(pInfo.nome);
+                            }
+                        }
+                    }
+                } else if (pInfo.controlarEstoque !== false) {
+                    if ((pInfo.estoqueAtual || 0) < item.quantidade) {
+                        if (!itensSemStock.includes(pInfo.nome))
+                            itensSemStock.push(pInfo.nome);
+                    }
                 }
             }
         }
 
+        let isEncomenda = false;
+        if (itensSemStock.length > 0) {
+            const prosseguir = window.confirm(
+                `⚠️ Atenção! Os seguintes itens estão esgotados:\n\n- ${itensSemStock.join("\n- ")}\n\nDeseja realizar o pedido como ENCOMENDA? O tempo de preparo será maior.`,
+            );
+            if (!prosseguir) {
+                setProcessandoPedido(false);
+                return;
+            }
+            isEncomenda = true;
+        }
+
         // =========================================================
-        // FLUXO 1: PEDIDO NA MESA (QR CODE)
+        // PASSO 2: FLUXO MESA
         // =========================================================
         if (numeroDaMesa) {
             try {
@@ -254,40 +263,34 @@ export default function Catalogo() {
                 const snapComandas = await getDocs(q);
 
                 if (!snapComandas.empty) {
-                    const comandaAtivaDoc = snapComandas.docs[0];
-                    const dadosComanda = comandaAtivaDoc.data();
-                    let itensAtuais = [...(dadosComanda.itens || [])];
-
-                    carrinho.forEach((itemCarrinho) => {
-                        const indexExistente = itensAtuais.findIndex(
-                            (i) => i.id_produto === itemCarrinho.id,
+                    const comandaDoc = snapComandas.docs[0];
+                    let itensAtuais = [...(comandaDoc.data().itens || [])];
+                    carrinho.forEach((cartItem) => {
+                        const idx = itensAtuais.findIndex(
+                            (i) => i.id_produto === cartItem.id,
                         );
-                        if (indexExistente >= 0) {
-                            itensAtuais[indexExistente].qtd_total +=
-                                itemCarrinho.quantidade;
-                        } else {
+                        if (idx >= 0)
+                            itensAtuais[idx].qtd_total += cartItem.quantidade;
+                        else
                             itensAtuais.push({
-                                id_produto: itemCarrinho.id,
-                                nome: itemCarrinho.nome,
-                                preco: itemCarrinho.preco,
-                                qtd_total: itemCarrinho.quantidade,
+                                id_produto: cartItem.id,
+                                nome: cartItem.nome,
+                                preco: cartItem.preco,
+                                qtd_total: cartItem.quantidade,
                                 qtd_paga: 0,
                             });
-                        }
                     });
-
-                    await updateDoc(doc(db, "comandas", comandaAtivaDoc.id), {
+                    await updateDoc(doc(db, "comandas", comandaDoc.id), {
                         itens: itensAtuais,
                     });
                 } else {
-                    const itensFormatados = carrinho.map((item) => ({
-                        id_produto: item.id,
-                        nome: item.nome,
-                        preco: item.preco,
-                        qtd_total: item.quantidade,
+                    const itensFormatados = carrinho.map((i) => ({
+                        id_produto: i.id,
+                        nome: i.nome,
+                        preco: i.preco,
+                        qtd_total: i.quantidade,
                         qtd_paga: 0,
                     }));
-
                     await addDoc(collection(db, "comandas"), {
                         loja: nomeDaLoja,
                         identificador: identificadorMesa,
@@ -299,81 +302,63 @@ export default function Catalogo() {
                     });
                 }
 
-                // CRIAR TICKET NA COZINHA (KDS) PARA AUTOATENDIMENTO
                 await addDoc(collection(db, "pedidos"), {
                     loja: nomeDaLoja,
                     cliente: identificadorMesa,
                     origem: "mesa",
-                    telefone: "QR Code Autoatendimento",
+                    telefone: "QR Code",
                     itens: carrinho,
                     valorTotal: valorTotal,
                     status: "agendado",
                     criadoEm: new Date().toISOString(),
+                    temEncomenda: isEncomenda, // <--- FLAG PARA A COZINHA!
                 });
 
-                // MOTOR DE BAIXA INTELIGENTE (MESA)
+                // Baixa no Stock (Vai ficar negativo se for encomenda, o que é correto para a OP)
                 for (const item of carrinho) {
-                    const prodRef = doc(db, "produtos", item.id);
-                    const prodSnap = await getDoc(prodRef);
-
-                    if (prodSnap.exists()) {
-                        const prodDB = prodSnap.data();
-
-                        if (
-                            prodDB.fichaTecnica &&
-                            prodDB.fichaTecnica.length > 0
-                        ) {
-                            for (const ing of prodDB.fichaTecnica) {
-                                const insumoRef = doc(
-                                    db,
-                                    "produtos",
-                                    ing.id_insumo,
-                                );
-                                const insumoSnap = await getDoc(insumoRef);
-                                if (insumoSnap.exists()) {
-                                    const insumoDB = insumoSnap.data();
-                                    const qtdDescontar =
+                    const pRef = doc(db, "produtos", item.id);
+                    const pSnap = await getDoc(pRef);
+                    if (pSnap.exists()) {
+                        const pDB = pSnap.data();
+                        if (pDB.fichaTecnica && pDB.fichaTecnica.length > 0) {
+                            for (const ing of pDB.fichaTecnica) {
+                                const iRef = doc(db, "produtos", ing.id_insumo);
+                                const iSnap = await getDoc(iRef);
+                                if (iSnap.exists()) {
+                                    const novoE =
+                                        (iSnap.data().estoqueAtual || 0) -
                                         ing.quantidade * item.quantidade;
-                                    const novoEstoque =
-                                        (insumoDB.estoqueAtual || 0) -
-                                        qtdDescontar;
-
-                                    await updateDoc(insumoRef, {
-                                        estoqueAtual: novoEstoque,
+                                    await updateDoc(iRef, {
+                                        estoqueAtual: novoE,
                                     });
                                     await addDoc(
                                         collection(db, "movimentacoes_estoque"),
                                         {
                                             loja: nomeDaLoja,
-                                            produtoId: insumoSnap.id,
-                                            produtoNome: insumoDB.nome,
+                                            produtoId: iSnap.id,
+                                            produtoNome: iSnap.data().nome,
                                             tipo: "saida",
-                                            quantidade: qtdDescontar,
-                                            estoqueAnterior:
-                                                insumoDB.estoqueAtual || 0,
-                                            estoqueNovo: novoEstoque,
-                                            motivo: `Autoatendimento (${identificadorMesa}) - Utilizado em ${item.quantidade}x ${prodDB.nome}`,
+                                            quantidade:
+                                                ing.quantidade *
+                                                item.quantidade,
+                                            motivo: `Autoatendimento (${identificadorMesa})`,
                                             data: new Date().toISOString(),
                                         },
                                     );
                                 }
                             }
-                        } else if (prodDB.controlarEstoque !== false) {
-                            const novoEstoque =
-                                (prodDB.estoqueAtual || 0) - item.quantidade;
-                            await updateDoc(prodRef, {
-                                estoqueAtual: novoEstoque,
-                            });
+                        } else if (pDB.controlarEstoque !== false) {
+                            const novoE =
+                                (pDB.estoqueAtual || 0) - item.quantidade;
+                            await updateDoc(pRef, { estoqueAtual: novoE });
                             await addDoc(
                                 collection(db, "movimentacoes_estoque"),
                                 {
                                     loja: nomeDaLoja,
-                                    produtoId: prodSnap.id,
-                                    produtoNome: prodDB.nome,
+                                    produtoId: pSnap.id,
+                                    produtoNome: pDB.nome,
                                     tipo: "saida",
                                     quantidade: item.quantidade,
-                                    estoqueAnterior: prodDB.estoqueAtual || 0,
-                                    estoqueNovo: novoEstoque,
                                     motivo: `Autoatendimento (${identificadorMesa})`,
                                     data: new Date().toISOString(),
                                 },
@@ -381,12 +366,10 @@ export default function Catalogo() {
                         }
                     }
                 }
-
                 setCarrinho([]);
                 setMostrarModalSucessoMesa(true);
-            } catch (error) {
-                console.error("ERRO NO FIREBASE:", error);
-                alert("Erro ao enviar pedido para a cozinha. Chame o garçom.");
+            } catch (e) {
+                alert("Erro ao enviar pedido.");
             } finally {
                 setProcessandoPedido(false);
             }
@@ -394,15 +377,12 @@ export default function Catalogo() {
         }
 
         // =========================================================
-        // FLUXO 2: DELIVERY (SEM MESA)
+        // PASSO 3: FLUXO DELIVERY
         // =========================================================
         if (!nomeCliente || !telefoneCliente) {
             setProcessandoPedido(false);
-            return alert(
-                "Por favor, preencha o seu nome e telefone para continuar.",
-            );
+            return alert("Preencha nome e telefone.");
         }
-
         const valorSinal = valorTotal * 0.5;
         const payload = gerarPixCopiaECola(
             configLoja?.chavePix || "000",
@@ -421,506 +401,296 @@ export default function Catalogo() {
                 endereco: enderecoCliente,
                 dataEntrega: dataEntrega,
                 itens: carrinho,
-                valorTotal: valorTotal,
-                valorSinal: valorSinal,
+                valorTotal,
+                valorSinal,
                 status: "aguardando_pix",
                 criadoEm: new Date().toISOString(),
+                temEncomenda: isEncomenda, // <--- FLAG PARA A COZINHA!
             });
 
-            // MOTOR DE BAIXA INTELIGENTE (DELIVERY)
+            // Mesma Baixa de Stock do Delivery...
             for (const item of carrinho) {
-                const prodRef = doc(db, "produtos", item.id);
-                const prodSnap = await getDoc(prodRef);
-
-                if (prodSnap.exists()) {
-                    const prodDB = prodSnap.data();
-
-                    if (prodDB.fichaTecnica && prodDB.fichaTecnica.length > 0) {
-                        for (const ing of prodDB.fichaTecnica) {
-                            const insumoRef = doc(
-                                db,
-                                "produtos",
-                                ing.id_insumo,
-                            );
-                            const insumoSnap = await getDoc(insumoRef);
-                            if (insumoSnap.exists()) {
-                                const insumoDB = insumoSnap.data();
-                                const qtdDescontar =
+                const pRef = doc(db, "produtos", item.id);
+                const pSnap = await getDoc(pRef);
+                if (pSnap.exists()) {
+                    const pDB = pSnap.data();
+                    if (pDB.fichaTecnica && pDB.fichaTecnica.length > 0) {
+                        for (const ing of pDB.fichaTecnica) {
+                            const iRef = doc(db, "produtos", ing.id_insumo);
+                            const iSnap = await getDoc(iRef);
+                            if (iSnap.exists()) {
+                                const novoE =
+                                    (iSnap.data().estoqueAtual || 0) -
                                     ing.quantidade * item.quantidade;
-                                const novoEstoque =
-                                    (insumoDB.estoqueAtual || 0) - qtdDescontar;
-
-                                await updateDoc(insumoRef, {
-                                    estoqueAtual: novoEstoque,
-                                });
-                                await addDoc(
-                                    collection(db, "movimentacoes_estoque"),
-                                    {
-                                        loja: nomeDaLoja,
-                                        produtoId: insumoSnap.id,
-                                        produtoNome: insumoDB.nome,
-                                        tipo: "saida",
-                                        quantidade: qtdDescontar,
-                                        estoqueAnterior:
-                                            insumoDB.estoqueAtual || 0,
-                                        estoqueNovo: novoEstoque,
-                                        motivo: `Delivery (${nomeCliente}) - Utilizado em ${item.quantidade}x ${prodDB.nome}`,
-                                        data: new Date().toISOString(),
-                                    },
-                                );
+                                await updateDoc(iRef, { estoqueAtual: novoE });
                             }
                         }
-                    } else if (prodDB.controlarEstoque !== false) {
-                        const novoEstoque =
-                            (prodDB.estoqueAtual || 0) - item.quantidade;
-                        await updateDoc(prodRef, { estoqueAtual: novoEstoque });
-                        await addDoc(collection(db, "movimentacoes_estoque"), {
-                            loja: nomeDaLoja,
-                            produtoId: prodSnap.id,
-                            produtoNome: prodDB.nome,
-                            tipo: "saida",
-                            quantidade: item.quantidade,
-                            estoqueAnterior: prodDB.estoqueAtual || 0,
-                            estoqueNovo: novoEstoque,
-                            motivo: `Delivery (${nomeCliente})`,
-                            data: new Date().toISOString(),
-                        });
+                    } else if (pDB.controlarEstoque !== false) {
+                        const novoE = (pDB.estoqueAtual || 0) - item.quantidade;
+                        await updateDoc(pRef, { estoqueAtual: novoE });
                     }
                 }
             }
 
             setMostrarModalPix(true);
-        } catch (erro) {
-            console.error(erro);
-            alert("Erro ao gerar pedido. Verifique a sua ligação.");
+        } catch (e) {
+            alert("Erro no pedido.");
         } finally {
             setProcessandoPedido(false);
         }
     };
 
     const enviarWhatsAppReal = () => {
-        let msg = `*Novo Pedido - ${configLoja?.nomeExibicao || nomeDaLoja}*\n\n`;
-        msg += `*Cliente:* ${nomeCliente}\n*Telefone:* ${telefoneCliente}\n`;
-        if (cpfCliente) msg += `*CPF:* ${cpfCliente}\n`;
-        if (enderecoCliente) msg += `*Endereço:* ${enderecoCliente}\n`;
-        msg += `*Data Entrega:* ${dataEntrega ? new Date(dataEntrega).toLocaleString("pt-BR") : "Não informada"}\n\n*Itens:*\n`;
-        carrinho.forEach((item) => {
-            msg += `• ${item.quantidade}x ${item.nome} → ${formatarDinheiro(item.preco * item.quantidade)}\n`;
-        });
-        msg += `\n*Total: ${formatarDinheiro(valorTotal)}*\n*Sinal (50%): ${formatarDinheiro(valorTotal * 0.5)}*\n\n✅ *Sinal pago via Pix! (Comprovante anexo)*`;
+        let msg = `*Pedido: ${configLoja?.nomeExibicao}*\n*Cliente:* ${nomeCliente}\n\n*Itens:*`;
+        carrinho.forEach((i) => (msg += `\n• ${i.quantidade}x ${i.nome}`));
+        msg += `\n\n*Total:* ${formatarDinheiro(valorTotal)}\n✅ *Sinal pago!*`;
         window.open(
-            `https://wa.me/${configLoja?.whatsapp || "5547999545703"}?text=${encodeURIComponent(msg)}`,
+            `https://wa.me/${configLoja?.whatsapp}?text=${encodeURIComponent(msg)}`,
             "_blank",
         );
     };
 
-    const rolarParaCarrinho = () => {
-        const elemento = document.getElementById("carrinho-secao");
-        if (elemento) elemento.scrollIntoView({ behavior: "smooth" });
-    };
-
     const tema = CATALOGO_TEMAS[configLoja?.tema] || CATALOGO_TEMAS.pink;
-
     if (loadingConfig)
         return (
             <div
                 className={`min-h-screen flex items-center justify-center ${tema.bgFundo}`}
             >
-                <p className="text-lg text-slate-600 font-medium animate-pulse">
-                    A carregar cardápio...
-                </p>
+                <p className="animate-pulse">A carregar cardápio...</p>
             </div>
         );
-
-    if (
-        !configLoja ||
-        Object.keys(configLoja).length === 0 ||
-        !configLoja.nomeExibicao
-    ) {
+    if (!configLoja?.nomeExibicao)
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-                <Store size={48} className="text-slate-400 mb-4" />
-                <h2 className="text-2xl font-bold text-slate-700 mb-2">
-                    Loja não encontrada
-                </h2>
-                <p className="text-slate-500 max-w-sm">
-                    Verifique se digitou o link corretamente na barra de
-                    endereço ou escaneou o QR Code correto.
-                </p>
+            <div className="text-center p-20">
+                <Store size={48} className="mx-auto mb-4" />
+                <h2>Loja não encontrada</h2>
             </div>
         );
-    }
 
-    const categoriasPresentes = [
+    const categorias = [
         ...new Set(produtosDaLoja.map((p) => p.categoria || "Outros")),
     ].sort();
 
     return (
         <div
-            className={`min-h-screen ${tema.bgFundo} text-slate-800 pb-32 relative transition-colors duration-500`}
+            className={`min-h-screen ${tema.bgFundo} text-slate-800 pb-32 transition-colors duration-500`}
         >
             {numeroDaMesa && (
                 <div
-                    className={`${tema.bgDestaque} text-white p-2 text-center text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 shadow-md`}
+                    className={`${tema.bgDestaque} text-white p-2 text-center text-xs font-bold uppercase sticky top-0 z-50`}
                 >
-                    <Utensils size={14} /> Atendimento na Mesa {numeroDaMesa}
+                    <Utensils size={14} className="inline mr-2" /> Mesa{" "}
+                    {numeroDaMesa}
                 </div>
             )}
-
-            <div
-                className={`bg-white border-b ${tema.borda} sticky top-0 z-40 shadow-sm`}
-            >
-                <div className="max-w-7xl mx-auto p-4 md:p-6 flex flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-4 w-full md:w-auto">
-                        {configLoja.logo ? (
-                            <img
-                                src={configLoja.logo}
-                                alt="Logo"
-                                className={`w-14 h-14 md:w-16 md:h-16 rounded-full object-cover border-2 ${tema.bordaForte}`}
-                            />
-                        ) : (
-                            <div
-                                className={`w-14 h-14 md:w-16 md:h-16 rounded-full ${tema.bgSecundario} ${tema.texto} flex items-center justify-center font-black text-2xl flex-shrink-0`}
-                            >
-                                {configLoja.nomeExibicao.charAt(0)}
-                            </div>
-                        )}
-                        <div>
-                            <h1 className="text-xl md:text-3xl font-bold text-slate-900 line-clamp-1">
-                                {configLoja.nomeExibicao}
-                            </h1>
-                            <p
-                                className={`${tema.texto} font-medium text-xs md:text-sm`}
-                            >
-                                {numeroDaMesa
-                                    ? `Faça seu pedido na Mesa ${numeroDaMesa}`
-                                    : "Catálogo Digital"}
-                            </p>
-                        </div>
-                    </div>
-                    {!numeroDaMesa && (
-                        <Link
-                            to={`/login/${nomeDaLoja}`}
-                            className={`text-xs font-bold text-slate-300 ${tema.hoverTexto} transition-colors flex flex-col items-center gap-1`}
-                        >
-                            <Lock size={18} />
-                            <span className="hidden md:block text-[10px] uppercase tracking-widest">
-                                Painel
-                            </span>
-                        </Link>
+            <div className="bg-white border-b sticky top-0 z-40 p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    {configLoja.logo && (
+                        <img
+                            src={configLoja.logo}
+                            className="w-12 h-12 rounded-full object-cover border"
+                        />
                     )}
+                    <h1 className="font-bold text-lg">
+                        {configLoja.nomeExibicao}
+                    </h1>
                 </div>
-                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex gap-3 overflow-x-auto snap-x no-scrollbar">
-                    {categoriasPresentes.map((cat) => (
-                        <a
-                            href={`#cat-${cat.replace(/\s+/g, "-")}`}
-                            key={cat}
-                            className={`px-5 py-2 bg-slate-50 text-slate-600 rounded-full font-bold text-sm whitespace-nowrap border border-slate-200 ${tema.hoverBorda} ${tema.hoverTexto} ${tema.hoverBgSecundario} transition-colors snap-start`}
-                        >
-                            {cat}
-                        </a>
-                    ))}
-                </div>
+                {!numeroDaMesa && (
+                    <Link
+                        to={`/login/${nomeDaLoja}`}
+                        className="text-slate-300 hover:text-slate-500"
+                    >
+                        <Lock size={18} />
+                    </Link>
+                )}
             </div>
 
-            <div className="max-w-7xl mx-auto p-4 md:p-6 mt-4">
-                {produtosDaLoja.length === 0 ? (
-                    <div className="text-center py-20 text-slate-400">
-                        <ShoppingBag
-                            size={48}
-                            className="mx-auto mb-4 opacity-50"
-                        />
-                        <p className="font-bold text-lg">
-                            Cardápio em atualização.
-                        </p>
-                    </div>
-                ) : (
-                    categoriasPresentes.map((categoria) => (
-                        <div
-                            key={categoria}
-                            id={`cat-${categoria.replace(/\s+/g, "-")}`}
-                            className="mb-14 scroll-mt-40"
-                        >
-                            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-4">
-                                {categoria}{" "}
-                                <span
-                                    className={`flex-1 h-px ${tema.bordaForte}`}
-                                ></span>
-                            </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {produtosDaLoja
-                                    .filter(
-                                        (p) =>
-                                            (p.categoria || "Outros") ===
-                                            categoria,
-                                    )
-                                    .map((produto) => (
-                                        <div
-                                            key={produto.id}
-                                            className={`bg-white p-4 md:p-5 rounded-3xl shadow-sm border ${tema.borda} hover:shadow-md transition-all flex flex-col justify-between`}
-                                        >
-                                            <img
-                                                src={produto.imagem}
-                                                alt={produto.nome}
-                                                className="w-full h-40 sm:h-48 md:h-56 rounded-2xl mb-4 object-cover bg-slate-100"
-                                            />
-                                            <div>
-                                                <h3 className="font-bold text-lg md:text-xl text-slate-800 mb-1 line-clamp-1">
-                                                    {produto.nome}
-                                                </h3>
-                                                <p className="text-slate-500 text-xs md:text-sm mb-4 line-clamp-2">
-                                                    {produto.descricao}
-                                                </p>
-                                            </div>
-                                            <div className="flex justify-between items-center mt-auto pt-4 border-t border-slate-50">
-                                                <span
-                                                    className={`font-black ${tema.texto} text-xl md:text-2xl`}
-                                                >
-                                                    {formatarDinheiro(
-                                                        produto.preco,
-                                                    )}
-                                                </span>
-                                                <button
-                                                    onClick={() =>
-                                                        adicionarAoCarrinho(
-                                                            produto,
-                                                        )
-                                                    }
-                                                    className={`bg-slate-900 ${tema.hoverBotaoEscuro} text-white p-3 rounded-xl md:rounded-2xl font-medium transition-colors flex items-center justify-center shadow-md active:scale-95`}
-                                                >
-                                                    <Plus
-                                                        size={20}
-                                                        className="md:w-6 md:h-6"
-                                                    />
-                                                </button>
-                                            </div>
+            <div className="max-w-7xl mx-auto p-4 space-y-12">
+                {categorias.map((cat) => (
+                    <div key={cat} id={`cat-${cat.replace(/\\s+/g, "-")}`}>
+                        <h2 className="text-xl font-black mb-6 border-b-2 inline-block border-slate-200">
+                            {cat}
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {produtosDaLoja
+                                .filter(
+                                    (p) => (p.categoria || "Outros") === cat,
+                                )
+                                .map((prod) => (
+                                    <div
+                                        key={prod.id}
+                                        className="bg-white p-4 rounded-3xl shadow-sm border flex flex-col justify-between"
+                                    >
+                                        <img
+                                            src={prod.imagem}
+                                            className="w-full h-40 object-cover rounded-2xl mb-4 bg-slate-100"
+                                        />
+                                        <div>
+                                            <h3 className="font-bold">
+                                                {prod.nome}
+                                            </h3>
+                                            <p className="text-xs text-slate-500 mb-4">
+                                                {prod.descricao}
+                                            </p>
                                         </div>
-                                    ))}
-                            </div>
+                                        <div className="flex justify-between items-center border-t pt-4">
+                                            <span
+                                                className={`font-black ${tema.texto}`}
+                                            >
+                                                {formatarDinheiro(prod.preco)}
+                                            </span>
+                                            <button
+                                                onClick={() =>
+                                                    adicionarAoCarrinho(prod)
+                                                }
+                                                className={`bg-slate-900 text-white p-2 rounded-xl active:scale-95 ${tema.hoverBotaoEscuro}`}
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
                         </div>
-                    ))
-                )}
+                    </div>
+                ))}
 
                 {carrinho.length > 0 && (
                     <div
                         id="carrinho-secao"
-                        className="max-w-2xl mx-auto mt-24 bg-white p-5 md:p-8 rounded-3xl shadow-xl border border-slate-100 scroll-mt-32"
+                        className="max-w-xl mx-auto bg-white p-6 rounded-3xl shadow-xl border scroll-mt-32 mt-12"
                     >
-                        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 mb-6 text-slate-800">
-                            <ShoppingCart className={tema.texto} />
-                            {numeroDaMesa
-                                ? `Sua Conta - Mesa ${numeroDaMesa}`
-                                : "O seu Pedido"}
+                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                            <ShoppingCart className={tema.texto} /> Seu Pedido
                         </h2>
-
                         <div className="space-y-3 mb-8">
-                            {carrinho.map((item) => (
+                            {carrinho.map((i) => (
                                 <div
-                                    key={item.id}
-                                    className="flex items-center justify-between bg-slate-50 p-3 md:p-4 rounded-2xl border border-slate-100"
+                                    key={i.id}
+                                    className="flex justify-between items-center bg-slate-50 p-3 rounded-2xl"
                                 >
-                                    <div className="flex-1 pr-2 md:pr-4">
-                                        <p className="font-bold text-slate-800 text-sm md:text-base line-clamp-1">
-                                            {item.nome}
+                                    <div>
+                                        <p className="font-bold text-sm">
+                                            {i.nome}
                                         </p>
-                                        <p
-                                            className={`${tema.texto} font-medium text-xs md:text-sm`}
-                                        >
-                                            {formatarDinheiro(item.preco)}
+                                        <p className="text-xs text-slate-400">
+                                            {formatarDinheiro(i.preco)}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2 md:gap-3 bg-white px-2 md:px-3 py-1.5 md:py-2 rounded-xl border border-slate-200 shadow-sm">
+                                    <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-xl border shadow-sm">
                                         <button
                                             onClick={() =>
-                                                alterarQuantidade(item.id, -1)
+                                                alterarQuantidade(i.id, -1)
                                             }
-                                            className={`text-slate-500 ${tema.hoverTexto} transition-colors p-1`}
                                         >
-                                            <Minus size={16} />
+                                            <Minus size={14} />
                                         </button>
-                                        <span className="font-bold w-4 text-center text-slate-800 text-sm md:text-base">
-                                            {item.quantidade}
+                                        <span className="font-bold text-sm w-4 text-center">
+                                            {i.quantidade}
                                         </span>
                                         <button
                                             onClick={() =>
-                                                alterarQuantidade(item.id, 1)
+                                                alterarQuantidade(i.id, 1)
                                             }
-                                            className={`text-slate-500 ${tema.hoverTexto} transition-colors p-1`}
                                         >
-                                            <Plus size={16} />
+                                            <Plus size={14} />
                                         </button>
                                     </div>
                                     <button
-                                        onClick={() =>
-                                            removerDoCarrinho(item.id)
-                                        }
-                                        className="text-red-400 hover:text-red-600 p-2 transition-colors"
+                                        onClick={() => removerDoCarrinho(i.id)}
+                                        className="text-red-400 p-2"
                                     >
                                         <X size={18} />
                                     </button>
                                 </div>
                             ))}
                         </div>
-
-                        <div className="border-t border-slate-100 pt-6">
-                            <div
-                                className={`flex justify-between items-center mb-8 ${tema.bgFundo} p-4 rounded-2xl border ${tema.borda}`}
-                            >
-                                <span className="text-base md:text-lg font-bold text-slate-700">
-                                    Subtotal:
-                                </span>
-                                <span
-                                    className={`text-2xl md:text-3xl font-black ${tema.texto}`}
-                                >
-                                    {formatarDinheiro(valorTotal)}
-                                </span>
-                            </div>
-
-                            {numeroDaMesa ? (
-                                <div className="space-y-4">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center mb-4 border-b border-slate-100 pb-4">
-                                        Fazer pedido direto da Mesa
-                                    </p>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            O seu Nome (Opcional)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={nomeCliente}
-                                            onChange={(e) =>
-                                                setNomeCliente(e.target.value)
-                                            }
-                                            className={`w-full bg-white text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                            placeholder="Ex: Maria"
-                                        />
-                                        <p className="text-xs text-slate-500 mt-2 text-center">
-                                            Os itens serão enviados para a
-                                            cozinha e adicionados à conta da
-                                            Mesa {numeroDaMesa}.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-5">
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            O seu Nome *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={nomeCliente}
-                                            onChange={(e) =>
-                                                setNomeCliente(e.target.value)
-                                            }
-                                            className={`w-full bg-white text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                            placeholder="Ex: Maria Silva"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
-                                            <Phone size={16} /> Telefone
-                                            (WhatsApp) *
-                                        </label>
-                                        <input
-                                            type="tel"
-                                            required
-                                            value={telefoneCliente}
-                                            onChange={(e) =>
-                                                setTelefoneCliente(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className={`w-full bg-white text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                            placeholder="Ex: 47999999999"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            CPF (Opcional - Para Nota Fiscal)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={cpfCliente}
-                                            onChange={(e) =>
-                                                setCpfCliente(e.target.value)
-                                            }
-                                            className={`w-full bg-white text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                            placeholder="Ex: 000.000.000-00"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            Endereço de Entrega (Opcional)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={enderecoCliente}
-                                            onChange={(e) =>
-                                                setEnderecoCliente(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className={`w-full bg-white text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                            placeholder="Rua, Número, Bairro"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            Data e Hora Desejada (Opcional)
-                                        </label>
-                                        <input
-                                            type="datetime-local"
-                                            value={dataEntrega}
-                                            onChange={(e) =>
-                                                setDataEntrega(e.target.value)
-                                            }
-                                            className={`w-full bg-white [color-scheme:light] text-slate-900 border border-slate-200 rounded-2xl p-4 focus:ring-2 ${tema.ring} focus:outline-none`}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <button
-                                onClick={finalizarPedido}
-                                disabled={processandoPedido}
-                                className={`w-full ${tema.bgDestaque} ${tema.hoverBgDestaque} text-white font-bold text-lg md:text-xl py-4 md:py-5 mt-8 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg ${tema.shadow} active:scale-95 disabled:opacity-50`}
-                            >
-                                {processandoPedido
-                                    ? "A Processar..."
-                                    : numeroDaMesa
-                                      ? "Enviar para a Cozinha"
-                                      : "Avançar para Pagamento"}
-                            </button>
+                        <div
+                            className={`p-4 rounded-2xl mb-8 flex justify-between font-black ${tema.bgSecundario} ${tema.texto}`}
+                        >
+                            <span>Total:</span>
+                            <span>{formatarDinheiro(valorTotal)}</span>
                         </div>
+
+                        {!numeroDaMesa ? (
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    placeholder="Seu Nome *"
+                                    value={nomeCliente}
+                                    onChange={(e) =>
+                                        setNomeCliente(e.target.value)
+                                    }
+                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
+                                />
+                                <input
+                                    type="tel"
+                                    placeholder="WhatsApp *"
+                                    value={telefoneCliente}
+                                    onChange={(e) =>
+                                        setTelefoneCliente(e.target.value)
+                                    }
+                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Endereço (Opcional)"
+                                    value={enderecoCliente}
+                                    onChange={(e) =>
+                                        setEnderecoCliente(e.target.value)
+                                    }
+                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
+                                />
+                                <input
+                                    type="datetime-local"
+                                    value={dataEntrega}
+                                    onChange={(e) =>
+                                        setDataEntrega(e.target.value)
+                                    }
+                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
+                                />
+                            </div>
+                        ) : (
+                            <input
+                                type="text"
+                                placeholder="Seu Nome (Opcional)"
+                                value={nomeCliente}
+                                onChange={(e) => setNomeCliente(e.target.value)}
+                                className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
+                            />
+                        )}
+
+                        <button
+                            onClick={finalizarPedido}
+                            disabled={processandoPedido}
+                            className={`w-full py-4 rounded-2xl mt-8 font-bold text-white shadow-lg ${tema.bgDestaque} disabled:opacity-50 active:scale-95`}
+                        >
+                            {processandoPedido
+                                ? "Processando..."
+                                : numeroDaMesa
+                                  ? "Enviar para Cozinha"
+                                  : "Avançar para Pagamento"}
+                        </button>
                     </div>
                 )}
             </div>
 
             {mostrarModalSucessoMesa && (
-                <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle
-                                size={40}
-                                className="text-emerald-500"
-                            />
-                        </div>
-                        <h2 className="text-2xl font-black text-slate-800 mb-2">
-                            Pedido na Cozinha! 🚀
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-8 rounded-3xl text-center max-w-sm w-full">
+                        <CheckCircle
+                            size={48}
+                            className="text-emerald-500 mx-auto mb-4"
+                        />
+                        <h2 className="text-xl font-bold mb-2">
+                            Pedido Enviado!
                         </h2>
-                        <p className="text-slate-500 mb-8">
-                            Os seus itens foram adicionados à conta da{" "}
-                            <b>Mesa {numeroDaMesa}</b> e já começaram a ser
-                            preparados.
+                        <p className="text-slate-500 mb-6">
+                            Seus itens já estão em produção para a Mesa{" "}
+                            {numeroDaMesa}.
                         </p>
                         <button
-                            onClick={() => {
-                                setMostrarModalSucessoMesa(false);
-                                window.location.reload();
-                            }}
-                            className={`w-full ${tema.bgDestaque} ${tema.hoverBgDestaque} text-white py-4 rounded-2xl font-bold transition-colors shadow-md active:scale-95`}
+                            onClick={() => window.location.reload()}
+                            className={`w-full py-4 rounded-2xl font-bold text-white ${tema.bgDestaque}`}
                         >
                             Continuar no Cardápio
                         </button>
@@ -928,54 +698,37 @@ export default function Catalogo() {
                 </div>
             )}
 
-            {mostrarModalPix && !numeroDaMesa && (
-                <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl overflow-y-auto max-h-[90vh]">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-2">
-                            Pedido Quase Lá! 🎉
+            {mostrarModalPix && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full">
+                        <h2 className="text-xl font-bold mb-4">
+                            Pagamento do Sinal (50%)
                         </h2>
-                        <p className="text-slate-500 mb-6 text-sm">
-                            Para confirmar sua reserva, realize o pagamento do
-                            sinal de 50%:
-                        </p>
-
-                        <div
-                            className={`${tema.bgFundo} p-4 rounded-2xl mb-6 border ${tema.borda}`}
-                        >
+                        <div className={`p-4 rounded-2xl mb-6 ${tema.bgFundo}`}>
                             <p
-                                className={`text-xs ${tema.texto} font-bold uppercase tracking-widest mb-1`}
+                                className={`text-xs uppercase font-bold ${tema.texto}`}
                             >
-                                Valor do Sinal
+                                Valor
                             </p>
-                            <p className="text-4xl font-black text-slate-800">
+                            <p className="text-3xl font-black">
                                 {formatarDinheiro(valorTotal * 0.5)}
                             </p>
                         </div>
-
-                        {pixPayload && (
-                            <div className="flex justify-center mb-6">
-                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm inline-block">
-                                    <QRCodeCanvas
-                                        value={pixPayload}
-                                        size={200}
-                                        level="M"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
+                        <div className="flex justify-center mb-6 bg-white p-4 border rounded-2xl shadow-sm">
+                            <QRCodeCanvas value={pixPayload} size={180} />
+                        </div>
                         <button
                             onClick={() => {
                                 navigator.clipboard.writeText(pixPayload);
-                                alert("Código Copiado!");
+                                alert("Copiado!");
                             }}
-                            className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-2xl font-bold mb-3 transition-colors shadow-md active:scale-95"
+                            className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold mb-3 active:scale-95"
                         >
                             Copiar Código Pix
                         </button>
                         <button
                             onClick={enviarWhatsAppReal}
-                            className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white py-4 rounded-2xl font-bold transition-colors shadow-md active:scale-95"
+                            className="w-full py-4 bg-[#25D366] text-white rounded-2xl font-bold active:scale-95"
                         >
                             Já paguei! Enviar Comprovante
                         </button>
@@ -984,29 +737,23 @@ export default function Catalogo() {
             )}
 
             {carrinho.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 z-40 animate-in slide-in-from-bottom duration-300 pointer-events-none">
-                    <div className="max-w-4xl mx-auto pointer-events-auto">
-                        <button
-                            onClick={rolarParaCarrinho}
-                            className={`w-full bg-slate-900 text-white p-4 md:p-5 rounded-3xl shadow-2xl flex items-center justify-between ${tema.hoverBgDestaque} transition-all active:scale-95 border border-white/10`}
-                        >
-                            <div className="flex items-center gap-3 md:gap-4">
-                                <div
-                                    className={`${tema.bgIconeCarrinho} text-white w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-black text-sm md:text-lg shadow-inner`}
-                                >
-                                    {totalItens}
-                                </div>
-                                <span className="font-bold text-sm md:text-lg tracking-tight">
-                                    Ver meu pedido
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-black/20 px-3 md:px-4 py-1.5 md:py-2 rounded-xl md:rounded-2xl">
-                                <span className="text-xl md:text-2xl font-black">
-                                    {formatarDinheiro(valorTotal)}
-                                </span>
-                            </div>
-                        </button>
-                    </div>
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-50">
+                    <button
+                        onClick={rolarParaCarrinho}
+                        className={`w-full bg-slate-900 text-white p-5 rounded-3xl shadow-2xl flex justify-between items-center border border-white/10 active:scale-95 ${tema.hoverBgDestaque}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <span
+                                className={`${tema.bgIconeCarrinho} w-8 h-8 rounded-full flex items-center justify-center font-bold`}
+                            >
+                                {totalItens}
+                            </span>
+                            <span className="font-bold">Ver Carrinho</span>
+                        </div>
+                        <span className="font-black text-xl">
+                            {formatarDinheiro(valorTotal)}
+                        </span>
+                    </button>
                 </div>
             )}
         </div>

@@ -11,7 +11,7 @@ import {
     Clock,
     UserCircle,
     Coffee,
-    X,
+    X, // <--- GARANTA QUE ESTE 'X' ESTÁ AQUI
     ShoppingBag,
     ArrowRightLeft,
 } from "lucide-react";
