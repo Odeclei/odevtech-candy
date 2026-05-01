@@ -1,596 +1,491 @@
 import { useState, useEffect } from "react";
 import {
-    Save,
-    Building2,
-    CreditCard,
-    ShieldAlert,
-    Image as ImageIcon,
-    Trash2,
-    MapPin,
-    FileText,
-} from "lucide-react";
-import { doc, setDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  addDoc,
+  deleteDoc,
+} from "firebase/firestore";
 import { db } from "../../firebase";
+import {
+  Save,
+  DollarSign,
+  Store,
+  Users,
+  Trash2,
+  UserPlus,
+  Image as ImageIcon,
+  TrendingUp,
+  Settings,
+} from "lucide-react";
 import imageCompression from "browser-image-compression";
 
-export default function AbaConfiguracoes({
-    nomeDaLoja,
-    configLoja,
-    setConfigLoja,
-    membrosEquipe,
-}) {
-    const [abaConfig, setAbaConfig] = useState("empresa");
+export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
+  const [abaAtual, setAbaAtual] = useState("geral");
+  const [config, setConfig] = useState({
+    logo: "",
+    nomeExibicao: "",
+    whatsapp: "",
+    cidade: "",
+    chavePix: "",
+    nomePix: "",
+    percCustosFixos: 20,
+    percImpostos: 6,
+    percLucroAlvo: 30,
+  });
 
-    // ==========================================
-    // ESTADOS: Dados da Empresa (Ampliados)
-    // ==========================================
-    const [editNomeExibicao, setEditNomeExibicao] = useState(
-        configLoja?.nomeExibicao || "",
-    );
-    const [editWhatsapp, setEditWhatsapp] = useState(
-        configLoja?.whatsapp || "",
-    );
-    const [editRazaoSocial, setEditRazaoSocial] = useState(
-        configLoja?.razaoSocial || "",
-    );
-    const [editCnpj, setEditCnpj] = useState(configLoja?.cnpj || "");
-    const [editInscricaoEstadual, setEditInscricaoEstadual] = useState(
-        configLoja?.inscricaoEstadual || "",
-    );
+  const [imagemArquivo, setImagemArquivo] = useState(null);
+  const [salvando, setSalvando] = useState(false);
 
-    // Endereço
-    const [editCep, setEditCep] = useState(configLoja?.cep || "");
-    const [editLogradouro, setEditLogradouro] = useState(
-        configLoja?.logradouro || "",
-    );
-    const [editNumero, setEditNumero] = useState(configLoja?.numero || "");
-    const [editBairro, setEditBairro] = useState(configLoja?.bairro || "");
-    const [editCidade, setEditCidade] = useState(configLoja?.cidade || "");
-    const [editEstado, setEditEstado] = useState(configLoja?.estado || "");
+  // Estados para a gestão da Equipa
+  const [novoMembro, setNovoMembro] = useState({
+    nome: "",
+    email: "",
+    role: "garcom",
+    senha: "",
+  });
+  const [salvandoMembro, setSalvandoMembro] = useState(false);
 
-    // Recebimentos
-    const [editChavePix, setEditChavePix] = useState(
-        configLoja?.chavePix || "",
-    );
-    const [editNomePix, setEditNomePix] = useState(configLoja?.nomePix || "");
-
-    const [logoArquivo, setLogoArquivo] = useState(null);
-    const [logoAtual, setLogoAtual] = useState(configLoja?.logo || "");
-    const [salvandoConfig, setSalvandoConfig] = useState(false);
-
-    // Estados de Equipe
-    const [novoMembroNome, setNovoMembroNome] = useState("");
-    const [novoMembroEmail, setNovoMembroEmail] = useState("");
-    const [novoMembroRole, setNovoMembroRole] = useState("garcom");
-    const [salvandoMembro, setSalvandoMembro] = useState(false);
-
-    useEffect(() => {
-        if (configLoja) {
-            setEditNomeExibicao(configLoja.nomeExibicao || "");
-            setEditWhatsapp(configLoja.whatsapp || "");
-            setEditRazaoSocial(configLoja.razaoSocial || "");
-            setEditCnpj(configLoja.cnpj || "");
-            setEditInscricaoEstadual(configLoja.inscricaoEstadual || "");
-            setEditCep(configLoja.cep || "");
-            setEditLogradouro(configLoja.logradouro || "");
-            setEditNumero(configLoja.numero || "");
-            setEditBairro(configLoja.bairro || "");
-            setEditCidade(configLoja.cidade || "");
-            setEditEstado(configLoja.estado || "");
-            setEditChavePix(configLoja.chavePix || "");
-            setEditNomePix(configLoja.nomePix || "");
-            setLogoAtual(configLoja.logo || "");
-        }
-    }, [configLoja]);
-
-    const salvarConfiguracoesEmpresa = async (e) => {
-        e.preventDefault();
-        setSalvandoConfig(true);
-        try {
-            let urlFinalLogo = logoAtual;
-            if (logoArquivo) {
-                const imgComprimida = await imageCompression(logoArquivo, {
-                    maxSizeMB: 0.3,
-                    maxWidthOrHeight: 800,
-                });
-                const formData = new FormData();
-                formData.append("file", imgComprimida);
-                formData.append("upload_preset", "doceapp_preset");
-                const resposta = await fetch(
-                    "https://api.cloudinary.com/v1_1/drm8oe5aa/image/upload",
-                    { method: "POST", body: formData },
-                );
-                urlFinalLogo = (await resposta.json()).secure_url;
-            }
-
-            const dadosSalvar = {
-                nomeExibicao: editNomeExibicao,
-                whatsapp: editWhatsapp,
-                logo: urlFinalLogo,
-                razaoSocial: editRazaoSocial,
-                cnpj: editCnpj,
-                inscricaoEstadual: editInscricaoEstadual,
-                cep: editCep,
-                logradouro: editLogradouro,
-                numero: editNumero,
-                bairro: editBairro,
-                cidade: editCidade,
-                estado: editEstado,
-                chavePix: editChavePix,
-                nomePix: editNomePix,
-                ativo: true,
-                atualizadoEm: new Date().toISOString(),
-            };
-
-            await setDoc(doc(db, "lojas", nomeDaLoja), dadosSalvar, {
-                merge: true,
-            });
-            setConfigLoja((prev) => ({ ...prev, ...dadosSalvar }));
-            setLogoAtual(urlFinalLogo);
-            alert("Dados cadastrais e fiscais atualizados com sucesso!");
-        } catch (erro) {
-            alert("Erro ao salvar as configurações.");
-        } finally {
-            setSalvandoConfig(false);
-        }
+  useEffect(() => {
+    if (!nomeDaLoja) return;
+    const carregar = async () => {
+      const docRef = doc(db, "lojas", nomeDaLoja);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setConfig((prev) => ({ ...prev, ...docSnap.data() }));
+      }
     };
+    carregar();
+  }, [nomeDaLoja]);
 
-    const adicionarMembroEquipe = async (e) => {
-        e.preventDefault();
-        setSalvandoMembro(true);
-        try {
-            await addDoc(collection(db, "equipe"), {
-                loja: nomeDaLoja,
-                nome: novoMembroNome,
-                email: novoMembroEmail.toLowerCase(),
-                role: novoMembroRole,
-                criadoEm: new Date().toISOString(),
-            });
-            setNovoMembroNome("");
-            setNovoMembroEmail("");
-            setNovoMembroRole("garcom");
-            alert("Membro adicionado à equipa!");
-        } catch (erro) {
-            alert("Erro ao adicionar membro.");
-        } finally {
-            setSalvandoMembro(false);
-        }
-    };
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setConfig((prev) => ({ ...prev, [name]: value }));
+  };
 
-    const removerMembro = async (id) => {
-        if (window.confirm("Remover o acesso deste membro?"))
-            await deleteDoc(doc(db, "equipe", id));
-    };
+  const salvarConfiguracoes = async (e) => {
+    e.preventDefault();
+    setSalvando(true);
+    try {
+      let urlDaFoto = config.logo;
 
-    return (
-        <div className="animate-in fade-in duration-300">
-            <div className="flex gap-2 border-b border-slate-200 mb-8 pb-px overflow-x-auto">
-                <button
-                    onClick={() => setAbaConfig("empresa")}
-                    className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaConfig === "empresa" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+      // Upload da imagem para o Cloudinary (se o utilizador selecionou uma nova)
+      if (imagemArquivo) {
+        const imagemComprimida = await imageCompression(imagemArquivo, {
+          maxSizeMB: 0.3,
+          maxWidthOrHeight: 800,
+        });
+        const formData = new FormData();
+        formData.append("file", imagemComprimida);
+        formData.append("upload_preset", "doceapp_preset");
+        const resposta = await fetch(
+          "https://api.cloudinary.com/v1_1/drm8oe5aa/image/upload",
+          { method: "POST", body: formData },
+        );
+        urlDaFoto = (await resposta.json()).secure_url;
+      }
+
+      const ref = doc(db, "lojas", nomeDaLoja);
+      const payload = {
+        ...config,
+        logo: urlDaFoto,
+        percCustosFixos: parseFloat(config.percCustosFixos) || 0,
+        percImpostos: parseFloat(config.percImpostos) || 0,
+        percLucroAlvo: parseFloat(config.percLucroAlvo) || 0,
+      };
+      await setDoc(ref, payload, { merge: true });
+      setConfig((prev) => ({ ...prev, logo: urlDaFoto }));
+      setImagemArquivo(null); // Limpa o ficheiro após sucesso
+      alert("Configurações atualizadas com sucesso!");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao salvar as configurações.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Funções da Equipa (Stakeholders)
+  const adicionarMembro = async (e) => {
+    e.preventDefault();
+    if (!novoMembro.nome || !novoMembro.email)
+      return alert("Preencha o nome e email.");
+    setSalvandoMembro(true);
+    try {
+      await addDoc(collection(db, "equipe"), {
+        loja: nomeDaLoja,
+        nome: novoMembro.nome,
+        email: novoMembro.email,
+        role: novoMembro.role,
+        senha: novoMembro.senha,
+        criadoEm: new Date().toISOString(),
+      });
+      setNovoMembro({ nome: "", email: "", role: "garcom", senha: "" });
+      alert("Membro adicionado à equipa!");
+    } catch (erro) {
+      alert("Erro ao adicionar membro.");
+    } finally {
+      setSalvandoMembro(false);
+    }
+  };
+
+  const removerMembro = async (id) => {
+    if (window.confirm("Tem a certeza que deseja remover este acesso?")) {
+      try {
+        await deleteDoc(doc(db, "equipe", id));
+      } catch (e) {
+        alert("Erro ao remover.");
+      }
+    }
+  };
+
+  return (
+    <div className="max-w-4xl animate-in fade-in duration-300 pb-20">
+      {/* NAVEGAÇÃO POR ABAS */}
+      <div className="flex gap-2 border-b border-slate-200 mb-8 pb-px overflow-x-auto">
+        <button
+          onClick={() => setAbaAtual("geral")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaAtual === "geral" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <Store size={18} className="inline mr-2" /> Dados Básicos
+        </button>
+        <button
+          onClick={() => setAbaAtual("recebimento")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaAtual === "recebimento" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <DollarSign size={18} className="inline mr-2" /> Recebimento
+        </button>
+        <button
+          onClick={() => setAbaAtual("markup")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaAtual === "markup" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <TrendingUp size={18} className="inline mr-2" /> Precificação
+        </button>
+        <button
+          onClick={() => setAbaAtual("equipe")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaAtual === "equipe" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <Users size={18} className="inline mr-2" /> Equipa e Acessos
+        </button>
+      </div>
+
+      {/* FORMULÁRIO PRINCIPAL (Apanha as 3 primeiras abas) */}
+      {["geral", "recebimento", "markup"].includes(abaAtual) && (
+        <form onSubmit={salvarConfiguracoes} className="space-y-8">
+          {/* ABA GERAL */}
+          {abaAtual === "geral" && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+              <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                <Store className="text-slate-400" /> Dados Básicos da Loja
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* UPLOAD DE LOGO */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center gap-1">
+                    <ImageIcon size={14} /> Logo da Empresa
+                  </label>
+                  <div className="flex items-center gap-4 border p-4 rounded-xl bg-slate-50">
+                    {imagemArquivo || config.logo ? (
+                      <img
+                        src={
+                          imagemArquivo
+                            ? URL.createObjectURL(imagemArquivo)
+                            : config.logo
+                        }
+                        alt="Logo"
+                        className="w-16 h-16 rounded-full object-cover border border-slate-200 bg-white"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">
+                        <ImageIcon size={24} />
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setImagemArquivo(e.target.files[0])}
+                      className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-bold file:bg-slate-800 file:text-white hover:file:bg-slate-700 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Nome de Exibição (Catálogo)
+                  </label>
+                  <input
+                    type="text"
+                    name="nomeExibicao"
+                    value={config.nomeExibicao}
+                    onChange={handleChange}
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    WhatsApp de Atendimento
+                  </label>
+                  <input
+                    type="text"
+                    name="whatsapp"
+                    value={config.whatsapp}
+                    onChange={handleChange}
+                    placeholder="Ex: 5547999999999"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Cidade / Região
+                  </label>
+                  <input
+                    type="text"
+                    name="cidade"
+                    value={config.cidade}
+                    onChange={handleChange}
+                    placeholder="Ex: São Bento do Sul"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA RECEBIMENTO */}
+          {abaAtual === "recebimento" && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+              <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                <DollarSign className="text-slate-400" /> Dados de Recebimento
+                (Pix)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Chave Pix
+                  </label>
+                  <input
+                    type="text"
+                    name="chavePix"
+                    value={config.chavePix}
+                    onChange={handleChange}
+                    placeholder="CPF, CNPJ, Email ou Celular"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Nome do Titular do Pix
+                  </label>
+                  <input
+                    type="text"
+                    name="nomePix"
+                    value={config.nomePix}
+                    onChange={handleChange}
+                    placeholder="Nome que aparece no banco"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA MARKUP */}
+          {abaAtual === "markup" && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+              <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                <TrendingUp className="text-emerald-500" /> Precificação
+                Inteligente (Markup)
+              </h2>
+              <p className="text-sm text-slate-500 mb-8 max-w-2xl">
+                Insira os percentuais do seu negócio. O sistema utilizará estes
+                dados para gerar um <strong>Preço Sugerido</strong> automático
+                no Cardápio.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                  <label className="block text-xs uppercase font-black text-slate-500 mb-3 tracking-widest">
+                    Custos Fixos
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      name="percCustosFixos"
+                      value={config.percCustosFixos}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 p-4 rounded-xl outline-none font-black text-2xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-800"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
+                      %
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                  <label className="block text-xs uppercase font-black text-slate-500 mb-3 tracking-widest">
+                    Impostos & Taxas
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      name="percImpostos"
+                      value={config.percImpostos}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 p-4 rounded-xl outline-none font-black text-2xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-800"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
+                      %
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-5 rounded-2xl border border-blue-200">
+                  <label className="block text-xs uppercase font-black text-blue-600 mb-3 tracking-widest">
+                    Lucro Líquido Alvo
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      name="percLucroAlvo"
+                      value={config.percLucroAlvo}
+                      onChange={handleChange}
+                      className="w-full border border-blue-300 p-4 rounded-xl outline-none font-black text-2xl text-blue-800 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-blue-400">
+                      %
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BOTÃO SALVAR GERAL */}
+          <button
+            type="submit"
+            disabled={salvando}
+            className="w-full md:w-auto px-12 py-5 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-slate-800 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-2 text-lg"
+          >
+            <Save size={24} />{" "}
+            {salvando ? "A processar..." : "Salvar Configurações da Aba"}
+          </button>
+        </form>
+      )}
+
+      {/* ABA DE EQUIPA (Isolada porque usa Lógica Diferente) */}
+      {abaAtual === "equipe" && (
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                <Users className="text-blue-500" /> Equipa e Acessos
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Gerencie os acessos de Administradores, Garçons e Cozinha.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Formulário Novo Membro */}
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 h-fit">
+              <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <UserPlus size={18} /> Novo Acesso
+              </h3>
+              <form onSubmit={adicionarMembro} className="space-y-4">
+                <input
+                  type="text"
+                  required
+                  placeholder="Nome do Membro"
+                  value={novoMembro.nome}
+                  onChange={(e) =>
+                    setNovoMembro({ ...novoMembro, nome: e.target.value })
+                  }
+                  className="w-full border border-slate-300 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <input
+                  type="email"
+                  required
+                  placeholder="Email de Login"
+                  value={novoMembro.email}
+                  onChange={(e) =>
+                    setNovoMembro({ ...novoMembro, email: e.target.value })
+                  }
+                  className="w-full border border-slate-300 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Senha de Acesso"
+                  value={novoMembro.senha}
+                  onChange={(e) =>
+                    setNovoMembro({ ...novoMembro, senha: e.target.value })
+                  }
+                  className="w-full border border-slate-300 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <select
+                  value={novoMembro.role}
+                  onChange={(e) =>
+                    setNovoMembro({ ...novoMembro, role: e.target.value })
+                  }
+                  className="w-full border border-slate-300 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 font-medium"
                 >
-                    <Building2 size={18} className="inline mr-2" /> Dados da
-                    Empresa
-                </button>
+                  <option value="garcom">
+                    Atendente / Garçom (App Mobile)
+                  </option>
+                  <option value="cozinha">Cozinheiro / Produção (KDS)</option>
+                  <option value="admin">Administrador (Acesso Total)</option>
+                </select>
                 <button
-                    onClick={() => setAbaConfig("pagamento")}
-                    className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaConfig === "pagamento" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                  type="submit"
+                  disabled={salvandoMembro}
+                  className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition"
                 >
-                    <CreditCard size={18} className="inline mr-2" />{" "}
-                    Recebimentos
+                  {salvandoMembro ? "A adicionar..." : "Adicionar Membro"}
                 </button>
-                <button
-                    onClick={() => setAbaConfig("equipe")}
-                    className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${abaConfig === "equipe" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                >
-                    <ShieldAlert size={18} className="inline mr-2" />{" "}
-                    Utilizadores
-                </button>
+              </form>
             </div>
 
-            {abaConfig === "empresa" && (
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-5xl">
-                    <form
-                        onSubmit={salvarConfiguracoesEmpresa}
-                        className="space-y-10"
-                    >
-                        {/* SEÇÃO 1: Identidade Visual */}
-                        <div className="flex items-center gap-6 pb-6 border-b border-slate-100">
-                            {logoAtual ? (
-                                <img
-                                    src={logoAtual}
-                                    alt="Logo"
-                                    className="w-24 h-24 rounded-full object-cover border border-slate-200 shadow-sm"
-                                />
-                            ) : (
-                                <div className="w-24 h-24 rounded-full bg-slate-100 border border-slate-200 border-dashed flex items-center justify-center text-slate-400">
-                                    <ImageIcon size={32} />
-                                </div>
-                            )}
-                            <div className="flex-1">
-                                <h3 className="font-bold text-slate-800 mb-1">
-                                    Logotipo da Empresa
-                                </h3>
-                                <p className="text-sm text-slate-500 mb-3">
-                                    Sua marca aparecerá no catálogo e nos cupons
-                                    térmicos.
-                                </p>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setLogoArquivo(e.target.files[0])
-                                    }
-                                    className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer"
-                                />
-                            </div>
-                        </div>
-
-                        {/* SEÇÃO 2: Dados Jurídicos e Fiscais */}
-                        <div>
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <FileText size={16} /> Informações Fiscais
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Razão Social
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editRazaoSocial}
-                                        onChange={(e) =>
-                                            setEditRazaoSocial(e.target.value)
-                                        }
-                                        placeholder="Ex: Razão Social LTDA"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        CNPJ
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editCnpj}
-                                        onChange={(e) =>
-                                            setEditCnpj(e.target.value)
-                                        }
-                                        placeholder="00.000.000/0001-00"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Inscrição Estadual
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editInscricaoEstadual}
-                                        onChange={(e) =>
-                                            setEditInscricaoEstadual(
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Isento ou Nº da IE"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Nome de Exibição (Fantasia)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={editNomeExibicao}
-                                        onChange={(e) =>
-                                            setEditNomeExibicao(e.target.value)
-                                        }
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        WhatsApp Principal
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={editWhatsapp}
-                                        onChange={(e) =>
-                                            setEditWhatsapp(e.target.value)
-                                        }
-                                        placeholder="554799999999"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* SEÇÃO 3: Endereço da Unidade */}
-                        <div>
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <MapPin size={16} /> Endereço de Operação
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-                                <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        CEP
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editCep}
-                                        onChange={(e) =>
-                                            setEditCep(e.target.value)
-                                        }
-                                        placeholder="00000-000"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div className="md:col-span-3">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Logradouro (Rua/Av)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editLogradouro}
-                                        onChange={(e) =>
-                                            setEditLogradouro(e.target.value)
-                                        }
-                                        placeholder="Nome da Rua"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div className="md:col-span-1">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Nº
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editNumero}
-                                        onChange={(e) =>
-                                            setEditNumero(e.target.value)
-                                        }
-                                        placeholder="123"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Bairro
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editBairro}
-                                        onChange={(e) =>
-                                            setEditBairro(e.target.value)
-                                        }
-                                        placeholder="Centro"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div className="md:col-span-3">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Cidade
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editCidade}
-                                        onChange={(e) =>
-                                            setEditCidade(e.target.value)
-                                        }
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium"
-                                    />
-                                </div>
-                                <div className="md:col-span-1">
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                        Estado
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editEstado}
-                                        onChange={(e) =>
-                                            setEditEstado(e.target.value)
-                                        }
-                                        placeholder="SC"
-                                        maxLength="2"
-                                        className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none font-medium text-center uppercase"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={salvandoConfig}
-                            className={`w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white transition-all shadow-lg ${salvandoConfig ? "bg-slate-400" : "bg-slate-900 hover:bg-amber-600 active:scale-95"}`}
-                        >
-                            <Save size={20} />{" "}
-                            {salvandoConfig
-                                ? "Salvando..."
-                                : "Salvar Cadastro Completo"}
-                        </button>
-                    </form>
+            {/* Lista de Membros */}
+            <div className="lg:col-span-2 space-y-3">
+              {!membrosEquipe || membrosEquipe.length === 0 ? (
+                <div className="text-center p-10 border border-dashed border-slate-200 rounded-2xl text-slate-400">
+                  <Users size={32} className="mx-auto mb-2 opacity-50" />
+                  <p>Nenhum membro cadastrado.</p>
                 </div>
-            )}
-
-            {/* ABA DE PAGAMENTO (RESTAURADA E SIMPLIFICADA) */}
-            {abaConfig === "pagamento" && (
-                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-3xl">
-                    <form
-                        onSubmit={salvarConfiguracoesEmpresa}
-                        className="space-y-6"
-                    >
-                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">
-                            Configuração de Recebimento via Pix
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                    Chave Pix
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editChavePix}
-                                    onChange={(e) =>
-                                        setEditChavePix(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                                    Nome do Titular (Banco)
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editNomePix}
-                                    onChange={(e) =>
-                                        setEditNomePix(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
-                                />
-                            </div>
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={salvandoConfig}
-                            className="w-full py-4 rounded-xl font-bold flex justify-center items-center gap-2 text-white bg-slate-900 hover:bg-amber-600 transition-all shadow-md"
-                        >
-                            <Save size={20} /> Salvar Chave Pix
-                        </button>
-                    </form>
-                </div>
-            )}
-
-            {/* ABA DE EQUIPE (MANTIDA IGUAL) */}
-            {abaConfig === "equipe" && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm h-fit">
-                        <h3 className="font-bold text-lg text-slate-800 mb-4">
-                            Novo Utilizador
-                        </h3>
-                        <form
-                            onSubmit={adicionarMembroEquipe}
-                            className="space-y-4"
-                        >
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1">
-                                    Nome
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={novoMembroNome}
-                                    onChange={(e) =>
-                                        setNovoMembroNome(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1">
-                                    E-mail (Login)
-                                </label>
-                                <input
-                                    type="email"
-                                    required
-                                    value={novoMembroEmail}
-                                    onChange={(e) =>
-                                        setNovoMembroEmail(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1">
-                                    Nível de Acesso
-                                </label>
-                                <select
-                                    value={novoMembroRole}
-                                    onChange={(e) =>
-                                        setNovoMembroRole(e.target.value)
-                                    }
-                                    className="w-full border border-slate-200 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 outline-none bg-white"
-                                >
-                                    <option value="garcom">
-                                        Garçom (Mesas)
-                                    </option>
-                                    <option value="funcionario">
-                                        Cozinha / Produção
-                                    </option>
-                                    <option value="admin">
-                                        Administrador (Total)
-                                    </option>
-                                </select>
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={salvandoMembro}
-                                className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold transition"
-                            >
-                                Adicionar Utilizador
-                            </button>
-                        </form>
+              ) : (
+                membrosEquipe.map((membro) => (
+                  <div
+                    key={membro.id}
+                    className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm"
+                  >
+                    <div>
+                      <p className="font-bold text-slate-800">{membro.nome}</p>
+                      <p className="text-xs text-slate-500">{membro.email}</p>
                     </div>
-
-                    <div className="lg:col-span-2 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-lg text-slate-800 mb-6">
-                            Equipa Atual
-                        </h3>
-                        <div className="space-y-3">
-                            {membrosEquipe.length === 0 ? (
-                                <p className="text-slate-500 italic">
-                                    Não tem membros adicionados além de si.
-                                </p>
-                            ) : (
-                                membrosEquipe.map((membro) => (
-                                    <div
-                                        key={membro.id}
-                                        className="flex justify-between items-center p-4 border border-slate-100 rounded-2xl bg-slate-50"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                                                {membro.nome.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-slate-800">
-                                                    {membro.nome}
-                                                </p>
-                                                <p className="text-xs text-slate-500">
-                                                    {membro.email}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span
-                                                className={`text-[10px] uppercase tracking-widest font-black px-3 py-1 rounded-lg border ${membro.role === "admin" ? "bg-red-50 text-red-600 border-red-200" : membro.role === "garcom" ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-200 text-slate-600 border-slate-300"}`}
-                                            >
-                                                {membro.role === "admin"
-                                                    ? "Admin"
-                                                    : membro.role === "garcom"
-                                                      ? "Garçom"
-                                                      : "Cozinha"}
-                                            </span>
-                                            <button
-                                                onClick={() =>
-                                                    removerMembro(membro.id)
-                                                }
-                                                className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${membro.role === "admin" ? "bg-purple-100 text-purple-700" : membro.role === "cozinha" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}
+                      >
+                        {membro.role}
+                      </span>
+                      <button
+                        onClick={() => removerMembro(membro.id)}
+                        className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-lg"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                </div>
-            )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-    );
+      )}
+    </div>
+  );
 }
