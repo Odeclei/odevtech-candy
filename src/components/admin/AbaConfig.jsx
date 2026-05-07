@@ -27,12 +27,17 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
     logo: "",
     nomeExibicao: "",
     whatsapp: "",
+    cnpj: "", // <-- NOVO CAMPO
+    endereco: "", // <-- NOVO CAMPO
     cidade: "",
     chavePix: "",
     nomePix: "",
     percCustosFixos: 20,
     percImpostos: 6,
     percLucroAlvo: 30,
+    percSinal: 50,
+    tema: "pink", // <-- NOVO
+    cobrarTaxaServico: true, // <-- NOVO
   });
 
   const [imagemArquivo, setImagemArquivo] = useState(null);
@@ -93,6 +98,10 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
         percCustosFixos: parseFloat(config.percCustosFixos) || 0,
         percImpostos: parseFloat(config.percImpostos) || 0,
         percLucroAlvo: parseFloat(config.percLucroAlvo) || 0,
+        percSinal:
+          parseFloat(config.percSinal) >= 0 ? parseFloat(config.percSinal) : 50,
+        tema: config.tema || "pink", // <-- NOVO
+        cobrarTaxaServico: config.cobrarTaxaServico !== false, // <-- NOVO
       };
       await setDoc(ref, payload, { merge: true });
       setConfig((prev) => ({ ...prev, logo: urlDaFoto }));
@@ -224,29 +233,122 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Nome de Exibição (Catálogo)
+                  </label>
+                  <input
+                    type="text"
+                    name="nomeExibicao"
+                    value={config.nomeExibicao || ""}
+                    onChange={handleChange}
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    CNPJ / CPF
+                  </label>
+                  <input
+                    type="text"
+                    name="cnpj"
+                    value={config.cnpj || ""}
+                    onChange={handleChange}
+                    placeholder="00.000.000/0001-00"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
                     WhatsApp de Atendimento
                   </label>
                   <input
                     type="text"
                     name="whatsapp"
-                    value={config.whatsapp}
+                    value={config.whatsapp || ""}
                     onChange={handleChange}
                     placeholder="Ex: 5547999999999"
                     className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">
                     Cidade / Região
                   </label>
                   <input
                     type="text"
                     name="cidade"
-                    value={config.cidade}
+                    value={config.cidade || ""}
                     onChange={handleChange}
                     placeholder="Ex: São Bento do Sul"
                     className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
                   />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                    Endereço Completo da Loja
+                  </label>
+                  <input
+                    type="text"
+                    name="endereco"
+                    value={config.endereco || ""}
+                    onChange={handleChange}
+                    placeholder="Rua, Número, Bairro - CEP"
+                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
+                  />
+                </div>
+                <div className="md:col-span-2 mt-4 pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* SELETOR DE TEMAS */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-3">
+                      Cor do Catálogo (Tema)
+                    </label>
+                    <div className="flex gap-3">
+                      {["pink", "amber", "blue", "emerald", "slate"].map(
+                        (cor) => (
+                          <button
+                            key={cor}
+                            type="button"
+                            onClick={() => setConfig({ ...config, tema: cor })}
+                            className={`w-10 h-10 rounded-full border-4 transition-all ${config.tema === cor ? "border-slate-800 scale-110" : "border-transparent"}`}
+                            style={{
+                              backgroundColor:
+                                cor === "pink"
+                                  ? "#db2777"
+                                  : cor === "amber"
+                                    ? "#d97706"
+                                    : cor === "blue"
+                                      ? "#2563eb"
+                                      : cor === "emerald"
+                                        ? "#059669"
+                                        : "#1e293b",
+                            }}
+                          />
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  {/* TAXA DE SERVIÇO */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-3">
+                      Taxa de Serviço (Mesas/Comandas)
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={config.cobrarTaxaServico !== false}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            cobrarTaxaServico: e.target.checked,
+                          })
+                        }
+                        className="w-5 h-5 accent-slate-900"
+                      />
+                      <span className="font-medium text-slate-700 text-sm">
+                        Cobrar 10% do Garçom no Salão
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -285,6 +387,33 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
                     placeholder="Nome que aparece no banco"
                     className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
                   />
+                  <div className="md:col-span-2 mt-4 pt-4 border-t border-slate-100">
+                    <label className="block text-sm font-bold text-slate-600 mb-1">
+                      Sinal Exigido para Pedidos Delivery/Encomenda (%)
+                    </label>
+                    <div className="relative w-full md:w-1/2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        name="percSinal"
+                        value={
+                          config.percSinal !== undefined ? config.percSinal : 50
+                        }
+                        onChange={handleChange}
+                        placeholder="Ex: 50 para metade, ou 0 para não cobrar"
+                        className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50 font-black text-lg text-slate-800"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
+                        %
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2 leading-relaxed max-w-sm">
+                      Se preencher com <strong>0</strong>, o sistema irá pular a
+                      tela do código Pix e o pedido irá direto para a sua tela
+                      de Triagem aguardando pagamento na entrega.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

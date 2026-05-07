@@ -366,18 +366,31 @@ export default function Catalogo() {
     // =========================================================
     // PASSO 3: FLUXO DELIVERY
     // =========================================================
+    // =========================================================
+    // PASSO 3: FLUXO DELIVERY
+    // =========================================================
     if (!nomeCliente || !telefoneCliente) {
       setProcessandoPedido(false);
       return alert("Preencha nome e telefone.");
     }
-    const valorSinal = valorTotal * 0.5;
-    const payload = gerarPixCopiaECola(
-      configLoja?.chavePix || "000",
-      configLoja?.nomePix || "Empresa",
-      configLoja?.cidade || "CIDADE",
-      valorSinal,
-    );
-    setPixPayload(payload);
+
+    // Calcula a porcentagem do Sinal baseado na Configuração da Loja
+    const percentualSinal =
+      configLoja?.percSinal !== undefined ? Number(configLoja.percSinal) : 50;
+    const valorSinal = (valorTotal * percentualSinal) / 100;
+
+    // Só gera o código de pix longo se realmente tiver sinal a cobrar
+    const payloadPix =
+      valorSinal > 0
+        ? gerarPixCopiaECola(
+            configLoja?.chavePix || "000",
+            configLoja?.nomePix || "Empresa",
+            configLoja?.cidade || "CIDADE",
+            valorSinal,
+          )
+        : "";
+
+    if (valorSinal > 0) setPixPayload(payloadPix);
 
     try {
       await addDoc(collection(db, "pedidos"), {
@@ -390,7 +403,8 @@ export default function Catalogo() {
         itens: carrinho,
         valorTotal,
         valorSinal,
-        status: "aguardando_pix",
+        // SE NÃO TIVER SINAL (0), CAI COMO PENDENTE (TRIAGEM) DIRETO
+        status: valorSinal > 0 ? "aguardando_pix" : "pendente",
         criadoEm: new Date().toISOString(),
         temEncomenda: isEncomenda, // <--- FLAG PARA A COZINHA!
       });
@@ -419,7 +433,13 @@ export default function Catalogo() {
         }
       }
 
-      setMostrarModalPix(true);
+      // DECISÃO FINAL DA TELA
+      if (valorSinal > 0) {
+        setMostrarModalPix(true);
+      } else {
+        alert("Pedido enviado com sucesso!");
+        enviarWhatsAppReal(false); // Dispara pro zap com a mensagem "Pagamento na entrega"
+      }
     } catch (e) {
       alert("Erro no pedido.");
     } finally {
@@ -427,18 +447,25 @@ export default function Catalogo() {
     }
   };
 
-  const enviarWhatsAppReal = () => {
+  const enviarWhatsAppReal = (exigiuSinal = true) => {
     let msg = `*Pedido: ${configLoja?.nomeExibicao}*\n*Cliente:* ${nomeCliente}\n\n*Itens:*`;
     carrinho.forEach((i) => (msg += `\n• ${i.quantidade}x ${i.nome}`));
-    msg += `\n\n*Total:* ${formatarDinheiro(valorTotal)}\n✅ *Sinal pago!*`;
+    msg += `\n\n*Total:* ${formatarDinheiro(valorTotal)}\n`;
+
+    // MENSAGEM DINÂMICA
+    msg += exigiuSinal
+      ? `✅ *Sinal pago!*`
+      : `⏳ *Pagamento na entrega/retirada.*`;
+
     window.open(
       `https://wa.me/${configLoja?.whatsapp}?text=${encodeURIComponent(msg)}`,
       "_blank",
     );
+
+    // FECHA O MODAL E LIMPA O CARRINHO
     setMostrarModalPix(false);
     setCarrinho([]);
   };
-
   const tema = CATALOGO_TEMAS[configLoja?.tema] || CATALOGO_TEMAS.pink;
   if (loadingConfig)
     return (
@@ -479,7 +506,9 @@ export default function Catalogo() {
               className="w-12 h-12 rounded-full object-cover border"
             />
           )}
-          <h1 className="font-bold text-lg">{configLoja.nomeExibicao}</h1>
+          <h1 className="font-bold text-slate-800 text-lg">
+            {configLoja.nomeExibicao}
+          </h1>
         </div>
         {!numeroDaMesa && (
           <Link
@@ -490,11 +519,31 @@ export default function Catalogo() {
           </Link>
         )}
       </div>
+      {/* NOVA NAVEGAÇÃO DE CATEGORIAS */}
+      <div className="bg-white shadow-sm sticky top-[80px] z-30 flex gap-3 overflow-x-auto no-scrollbar p-4">
+        {categorias.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => {
+              const el = document.getElementById(
+                `cat-${cat.replace(/\s+/g, "-")}`,
+              );
+              if (el) {
+                const y = el.getBoundingClientRect().top + window.scrollY - 140;
+                window.scrollTo({ top: y, behavior: "smooth" });
+              }
+            }}
+            className="px-5 py-2 rounded-full font-bold text-sm whitespace-nowrap border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
 
       <div className="max-w-7xl mx-auto p-4 space-y-12">
         {categorias.map((cat) => (
           <div key={cat} id={`cat-${cat.replace(/\\s+/g, "-")}`}>
-            <h2 className="text-xl font-black mb-6 border-b-2 inline-block border-slate-200">
+            <h2 className="text-xl text-slate-600 font-black mb-6 border-b-2 inline-block border-slate-200">
               {cat}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -510,7 +559,7 @@ export default function Catalogo() {
                       className="w-full h-40 object-cover rounded-2xl mb-4 bg-slate-100"
                     />
                     <div>
-                      <h3 className="font-bold">{prod.nome}</h3>
+                      <h3 className="text-slate-600 font-bold">{prod.nome}</h3>
                       <p className="text-xs text-slate-500 mb-4">
                         {prod.descricao}
                       </p>

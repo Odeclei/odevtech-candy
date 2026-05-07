@@ -41,6 +41,7 @@ export default function AbaCardapio({
 
   const [categoriasDaLoja, setCategoriasDaLoja] = useState([]);
   const [busca, setBusca] = useState("");
+  const [configLoja, setConfigLoja] = useState(null); // <-- NOVO ESTADO
 
   const produtoSendoEditado = produtos.find((p) => p.id === editandoProdutoId);
   const custoBloqueadoPeloEstoque = produtoSendoEditado?.controlarEstoque;
@@ -58,6 +59,29 @@ export default function AbaCardapio({
       if (!novaCategoria) setNovaCategoria(listaFinal[0]);
     });
   }, [nomeDaLoja, novaCategoria]);
+
+  // <-- NOVO USEEFFECT PARA LER O MARKUP
+  useEffect(() => {
+    if (!nomeDaLoja) return;
+    const unsubscribe = onSnapshot(doc(db, "lojas", nomeDaLoja), (docSnap) => {
+      if (docSnap.exists()) setConfigLoja(docSnap.data());
+    });
+    return () => unsubscribe();
+  }, [nomeDaLoja]);
+
+  // <-- NOVA MATEMÁTICA DO PREÇO SUGERIDO
+  let precoSugerido = 0;
+  if (novoCusto && configLoja) {
+    const custoNum = parseFloat(novoCusto);
+    const somaPercentuais =
+      (configLoja.percCustosFixos || 0) +
+      (configLoja.percImpostos || 0) +
+      (configLoja.percLucroAlvo || 0);
+    const divisor = 1 - somaPercentuais / 100;
+    if (divisor > 0 && custoNum > 0) {
+      precoSugerido = custoNum / divisor;
+    }
+  }
 
   const handleCategoriaChange = async (e) => {
     const valorSelecionado = e.target.value;
@@ -190,8 +214,9 @@ export default function AbaCardapio({
 
   return (
     <div className="animate-in fade-in duration-300 grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 sticky top-6">
+      <div className="bg-white p-6 lg:p-8 rounded-3xl shadow-sm border border-slate-100 lg:sticky lg:top-6 lg:max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-2">
+          {" "}
           {editandoProdutoId ? (
             <Edit className="text-slate-900" />
           ) : (
@@ -235,22 +260,10 @@ export default function AbaCardapio({
               className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none"
             />
           </div>
+
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">
-                Preço Final (R$)
-              </label>
-              <input
-                type="number"
-                required
-                step="0.01"
-                value={novoPreco}
-                onChange={(e) => setNovoPreco(e.target.value)}
-                className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none font-bold"
-              />
-            </div>
             <div className="relative">
-              <label className="block text-sm font-medium text-slate-600 mb-1 flex justify-between items-center">
+              <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center gap-1">
                 Custo (R$)
                 {custoBloqueadoPeloEstoque && (
                   <Lock
@@ -270,7 +283,29 @@ export default function AbaCardapio({
                 className={`w-full border p-3 rounded-xl outline-none font-bold ${custoBloqueadoPeloEstoque ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "focus:ring-2 focus:ring-slate-400"}`}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">
+                Preço Final (R$)
+              </label>
+              <input
+                type="number"
+                required
+                step="0.01"
+                value={novoPreco}
+                onChange={(e) => setNovoPreco(e.target.value)}
+                className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none font-bold"
+              />
+              {/* O PREÇO SUGERIDO AGORA APARECE ABAIXO DO INPUT */}
+              {precoSugerido > 0 && (
+                <div className="mt-1.5">
+                  <span className="inline-block text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-1 rounded shadow-sm">
+                    Sugerido: {formatarDinheiro(precoSugerido)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">
               NCM (Fiscal)
