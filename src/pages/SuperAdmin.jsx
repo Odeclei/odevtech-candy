@@ -512,6 +512,17 @@ export default function SuperAdmin() {
                                                                         {loja.whatsapp ||
                                                                             "Sem Wpp"}
                                                                     </button>
+                                                                    <p className="text-[10px] text-slate-400">
+                                                                        Data
+                                                                        Criação:{" "}
+                                                                        {loja.criadoEm
+                                                                            ? new Date(
+                                                                                  loja.criadoEm,
+                                                                              ).toLocaleDateString(
+                                                                                  "pt-BR",
+                                                                              )
+                                                                            : "Data não disponível"}
+                                                                    </p>
                                                                 </div>
                                                             </div>
                                                         </div>

@@ -233,18 +233,6 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-600 mb-1">
-                    Nome de Exibição (Catálogo)
-                  </label>
-                  <input
-                    type="text"
-                    name="nomeExibicao"
-                    value={config.nomeExibicao || ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 bg-slate-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-1">
                     CNPJ / CPF
                   </label>
                   <input

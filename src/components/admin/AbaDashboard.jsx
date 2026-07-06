@@ -11,6 +11,12 @@ import {
   Coffee,
   Users,
   Package,
+  X,
+  Save,
+  Phone,
+  MapPin,
+  FileText,
+  Search,
 } from "lucide-react";
 import {
   collection,
@@ -35,11 +41,13 @@ export default function AbaDashboard({
   const [comandas, setComandas] = useState([]);
   const [configLoja, setConfigLoja] = useState(null);
 
+  // Estados para edição rápida na triagem
   const [editandoId, setEditandoId] = useState(null);
   const [editNome, setEditNome] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
   const [editDocumento, setEditDocumento] = useState("");
   const [editEndereco, setEditEndereco] = useState("");
+  const [editValorPago, setEditValorPago] = useState(""); // <-- NOVO ESTADO
   const [sinalPago, setSinalPago] = useState(false);
 
   useEffect(() => {
@@ -47,622 +55,551 @@ export default function AbaDashboard({
     const unsubscribe = onSnapshot(doc(db, "lojas", nomeDaLoja), (docSnap) => {
       if (docSnap.exists()) setConfigLoja(docSnap.data());
     });
-    return () => unsubscribe();
-  }, [nomeDaLoja]);
 
-  useEffect(() => {
-    if (!nomeDaLoja) return;
-    const q = query(
+    const qComandas = query(
       collection(db, "comandas"),
       where("loja", "==", nomeDaLoja),
+      where("status", "==", "aberta"),
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setComandas(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const unComandas = onSnapshot(qComandas, (snap) => {
+      setComandas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      unComandas();
+    };
   }, [nomeDaLoja]);
 
-  const isDelivery = configLoja?.nicho !== "bar_restaurante";
+  // ==========================================
+  // BUSCA INTELIGENTE NO CRM
+  // ==========================================
+  const buscarDadosClienteNoCadastro = () => {
+    if (!editTelefone) return alert("Digite um telefone para buscar.");
+    const telBusca = editTelefone.replace(/\D/g, "");
 
-  const iniciarEdicao = (pedido) => {
-    setEditandoId(pedido.id);
-    setEditNome(pedido.cliente);
-    setEditTelefone(pedido.telefone || "");
-    setEditDocumento(pedido.documento || pedido.cpf || "");
-    setEditEndereco(pedido.endereco || "");
-    setSinalPago(pedido.sinalPago || false);
-  };
+    const encontrado = clientes.find((c) => {
+      const telC = (c.telefone || "").replace(/\D/g, "");
+      return telC === telBusca;
+    });
 
-  const buscarClienteNoCRM = () => {
-    if (!editDocumento) return alert("Digite um CPF ou CNPJ para buscar.");
-    const clienteEncontrado = clientes.find(
-      (c) => c.documento === editDocumento || c.cpf === editDocumento,
-    );
-    if (clienteEncontrado) {
-      setEditNome(clienteEncontrado.nome || editNome);
-      setEditTelefone(clienteEncontrado.telefone || editTelefone);
-      let enderecoFormatado = clienteEncontrado.endereco || editEndereco;
-      if (typeof clienteEncontrado.endereco === "object") {
-        const e = clienteEncontrado.endereco;
-        enderecoFormatado = [
-          e.logradouro ? `${e.logradouro}` : "",
-          e.numero ? `, ${e.numero}` : "",
-          e.bairro ? ` - ${e.bairro}` : "",
-          e.cidade ? `, ${e.cidade}` : "",
-          e.estado ? `/${e.estado}` : "",
-        ]
-          .join("")
-          .replace(/^[\s,]+/, "");
+    if (encontrado) {
+      setEditNome(encontrado.nome || "");
+      setEditDocumento(encontrado.documento || encontrado.cpf || "");
+
+      const end = encontrado.endereco;
+      if (typeof end === "string") {
+        setEditEndereco(end);
+      } else if (end && typeof end === "object") {
+        const formatado = `${end.logradouro || ""}, ${end.numero || ""} - ${end.bairro || ""} (${end.cidade || ""})`;
+        setEditEndereco(formatado.replace(/^, /, "").trim());
       }
-      setEditEndereco(enderecoFormatado);
-      alert(`Cliente encontrado no CRM! Dados preenchidos.`);
-    } else alert("Cliente não encontrado no CRM.");
-  };
-
-  const aceitarPedido = async (pedido) => {
-    try {
-      const nomeFinal = editNome || pedido.cliente;
-      const telefoneFinal = editTelefone || pedido.telefone;
-      await updateDoc(doc(db, "pedidos", pedido.id), {
-        status: "agendado",
-        cliente: nomeFinal,
-        telefone: telefoneFinal,
-        documento: editDocumento,
-        endereco: editEndereco,
-        sinalPago: sinalPago,
-      });
-      setEditandoId(null);
-      setEditNome("");
-      setEditTelefone("");
-      setEditDocumento("");
-      setEditEndereco("");
-      setSinalPago(false);
-      if (telefoneFinal) {
-        const statusPag = sinalPago
-          ? "✅ *Sinal confirmado!*"
-          : "⏳ *Aguardando sinal.*";
-        const msg = `Olá, *${nomeFinal}*! \n\nSeu pedido foi recebido e agendado na produção!\n\n${statusPag}\n\n📋 *Resumo:* ${formatarItensPedido(pedido.itens)}\n📅 *Para:* ${formatarDataEHora(pedido.dataEntrega)}\n\nObrigado!`;
-        window.open(
-          `https://wa.me/${telefoneFinal}?text=${encodeURIComponent(msg)}`,
-          "_blank",
-        );
-      }
-    } catch (erro) {
-      alert("Erro ao confirmar pedido.");
+      alert(`Dados de "${encontrado.nome}" carregados com sucesso!`);
+    } else {
+      alert("Nenhum cliente encontrado com este telefone no cadastro.");
     }
   };
 
-  const agora = new Date();
-  const mesAtual = agora.getMonth();
-  const anoAtual = agora.getFullYear();
+  // ==========================================
+  // LÓGICA DE NEGÓCIO E MÉTRICAS
+  // ==========================================
+  const isDelivery =
+    configLoja?.nicho === "delivery" || configLoja?.nicho === "confeitaria";
 
-  const pedidosNaTriagem = pedidos.filter(
-    (p) =>
-      (p.status === "pendente" || p.status === "aguardando_pix") &&
-      p.origem !== "mesa" &&
-      p.origem !== "garcom",
-  );
-  const pedidosDeHoje = pedidos.filter(
-    (p) =>
-      ["agendado", "em_producao"].includes(p.status) &&
-      isHoje(p.dataEntrega) &&
-      p.origem !== "mesa" &&
-      p.origem !== "garcom",
-  );
-
-  let faturamentoMesGlobal = 0;
-  let faturamentoHoje = 0;
-  let totalVendasHoje = 0;
-
-  pedidos.forEach((p) => {
-    if (p.origem === "mesa" || p.origem === "garcom") return; // EVITAR CONTAGEM DUPLA DOS TICKETS DE COZINHA!
-    const dataCriacao = p.dataEntrega ? p.dataEntrega : p.criadoEm;
-    const dataObj = new Date(p.criadoEm);
-
-    if (
-      (p.status === "pronto" || p.status === "entregue") &&
-      dataObj.getMonth() === mesAtual &&
-      dataObj.getFullYear() === anoAtual
-    ) {
-      faturamentoMesGlobal += p.valorTotal || 0;
-    }
-    if (isHoje(dataCriacao) && p.status !== "cancelado") {
-      faturamentoHoje += p.valorTotal || 0;
-      totalVendasHoje += 1;
-    }
-  });
-
-  const mesasAtivas = comandas.filter((c) => c.status !== "fechada").length;
-  comandas.forEach((c) => {
-    if (c.abertaEm) {
-      const dataObj = new Date(c.abertaEm);
-      if (
-        dataObj.getMonth() === mesAtual &&
-        dataObj.getFullYear() === anoAtual
-      ) {
-        let sub = 0;
-        (c.itens || []).forEach((i) => (sub += i.preco * i.qtd_total));
-        faturamentoMesGlobal +=
-          sub + (configLoja?.cobrarTaxaServico !== false ? sub * 0.1 : 0);
-      }
-    }
-    if (isHoje(c.abertaEm)) {
-      let totalComanda = 0;
-      (c.itens || []).forEach(
-        (item) => (totalComanda += item.preco * item.qtd_total),
-      );
-      faturamentoHoje +=
-        totalComanda +
-        (configLoja?.cobrarTaxaServico !== false ? totalComanda * 0.1 : 0);
-      totalVendasHoje += 1;
-    }
-  });
+  const pedidosHoje = pedidos.filter((p) => isHoje(p.criadoEm));
+  const faturamentoHoje = pedidosHoje
+    .filter((p) => p.status !== "cancelado")
+    .reduce((acc, p) => acc + (p.valorTotal || 0), 0);
 
   const ticketMedio =
-    totalVendasHoje > 0 ? faturamentoHoje / totalVendasHoje : 0;
+    pedidosHoje.length > 0 ? faturamentoHoje / pedidosHoje.length : 0;
 
-  const contagemProdutos = {};
-  pedidos.forEach((p) => {
-    if (
-      p.status !== "cancelado" &&
-      p.origem !== "mesa" &&
-      p.origem !== "garcom"
-    ) {
-      (p.itens || []).forEach((item) => {
-        if (!contagemProdutos[item.id])
-          contagemProdutos[item.id] = {
-            nome: item.nome,
-            qtd: 0,
-            receita: 0,
-          };
-        contagemProdutos[item.id].qtd += item.quantidade;
-        contagemProdutos[item.id].receita += item.preco * item.quantidade;
+  const pedidosNaTriagem = pedidos.filter(
+    (p) => p.status === "pendente" || p.status === "aguardando_pix",
+  );
+
+  const mesasAtivas = comandas.length;
+
+  const mesAtual = new Date().getMonth();
+  const faturamentoMesGlobal = pedidos
+    .filter(
+      (p) =>
+        p.status !== "cancelado" &&
+        new Date(p.criadoEm).getMonth() === mesAtual,
+    )
+    .reduce((acc, p) => acc + (p.valorTotal || 0), 0);
+
+  // ==========================================
+  // FUNÇÕES DE AÇÃO (ATUALIZADAS)
+  // ==========================================
+  const aprovarPedido = async (pedido) => {
+    // Sugere o valor original do sinal, mas permite que o operador digite o que realmente caiu no extrato
+    const valorSugerido = pedido.valorSinal || 0;
+    const valorInformado = window.prompt(
+      `Confirme o valor recebido no Pix para aprovar o pedido de ${pedido.cliente}:`,
+      valorSugerido,
+    );
+
+    if (valorInformado === null) return; // Operador cancelou
+
+    const valorFinal = parseFloat(valorInformado.replace(",", ".")) || 0;
+
+    try {
+      await updateDoc(doc(db, "pedidos", pedido.id), {
+        status: "agendado",
+        valorSinal: valorFinal, // Regista a verdade fiscal
       });
+    } catch (e) {
+      alert("Erro ao aprovar.");
     }
-  });
-  comandas.forEach((c) => {
-    (c.itens || []).forEach((item) => {
-      if (!contagemProdutos[item.id_produto])
-        contagemProdutos[item.id_produto] = {
-          nome: item.nome,
-          qtd: 0,
-          receita: 0,
-        };
-      contagemProdutos[item.id_produto].qtd += item.qtd_total;
-      contagemProdutos[item.id_produto].receita += item.preco * item.qtd_total;
-    });
-  });
-  const topProdutos = Object.values(contagemProdutos)
-    .sort((a, b) => b.qtd - a.qtd)
-    .slice(0, 5);
+  };
 
-  // =========================================================
-  // GRÁFICO (AGORA 100% FUNCIONAL E SEM BUG DE FUSO HORÁRIO)
-  // =========================================================
-  const diasSemana = getDiasDaSemana ? getDiasDaSemana() : [];
-  const dadosGrafico = diasSemana.map((dia) => {
-    let totalDia = 0;
-    pedidos.forEach((p) => {
-      if (p.origem === "mesa" || p.origem === "garcom") return;
-      const dataRef = p.dataEntrega ? p.dataEntrega : p.criadoEm;
-      if (dataRef && p.status !== "cancelado") {
-        const ano = new Date(dataRef).getFullYear();
-        const mes = String(new Date(dataRef).getMonth() + 1).padStart(2, "0");
-        const diaMes = String(new Date(dataRef).getDate()).padStart(2, "0");
-        if (`${ano}-${mes}-${diaMes}` === dia.dataBusca)
-          totalDia += p.valorTotal || 0;
-      }
-    });
-    comandas.forEach((c) => {
-      if (c.abertaEm) {
-        const ano = new Date(c.abertaEm).getFullYear();
-        const mes = String(new Date(c.abertaEm).getMonth() + 1).padStart(
-          2,
-          "0",
-        );
-        const diaMes = String(new Date(c.abertaEm).getDate()).padStart(2, "0");
-        if (`${ano}-${mes}-${diaMes}` === dia.dataBusca) {
-          let sub = 0;
-          (c.itens || []).forEach((i) => (sub += i.preco * i.qtd_total));
-          totalDia +=
-            sub + (configLoja?.cobrarTaxaServico !== false ? sub * 0.1 : 0);
-        }
-      }
-    });
-    return { nome: dia.nome, valor: totalDia };
-  });
+  const cancelarPedido = async (id) => {
+    if (window.confirm("Deseja realmente cancelar este pedido?")) {
+      await updateDoc(doc(db, "pedidos", id), { status: "cancelado" });
+    }
+  };
 
-  const maiorValorGrafico = Math.max(...dadosGrafico.map((d) => d.valor), 1);
+  const abrirEdicao = (p) => {
+    setEditandoId(p.id);
+    setEditNome(p.cliente || "");
+    setEditTelefone(p.telefone || "");
+    setEditDocumento(p.cpf || "");
+    setEditEndereco(p.endereco || "");
+    setEditValorPago(p.valorSinal || 0); // Puxa o valor do sinal cobrado
+    setSinalPago(p.status === "agendado" || p.valorSinal === 0);
+  };
+
+  const salvarAlteracoes = async () => {
+    try {
+      await updateDoc(doc(db, "pedidos", editandoId), {
+        cliente: editNome,
+        telefone: editTelefone,
+        cpf: editDocumento,
+        endereco: editEndereco,
+        status: sinalPago ? "agendado" : "aguardando_pix",
+        valorSinal: parseFloat(editValorPago) || 0, // Atualiza o valor realmente pago
+      });
+      setEditandoId(null);
+    } catch (e) {
+      alert("Erro ao salvar.");
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* 1. CARDS DE MÉTRICAS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
           <div>
             <p className="text-sm text-slate-500 mb-1">Vendas Hoje</p>
-            <p className="text-3xl font-bold text-emerald-600">
+            <p className="text-3xl font-black text-emerald-600">
               {formatarDinheiro(faturamentoHoje)}
             </p>
           </div>
-          <div className="bg-emerald-100 p-4 rounded-2xl">
-            <TrendingUp size={28} className="text-emerald-600" />
+          <div className="bg-emerald-50 p-4 rounded-2xl text-emerald-500">
+            <TrendingUp size={28} />
           </div>
         </div>
 
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
           <div>
             <p className="text-sm text-slate-500 mb-1">Ticket Médio</p>
-            <p className="text-3xl font-bold text-blue-600">
+            <p className="text-3xl font-black text-blue-600">
               {formatarDinheiro(ticketMedio)}
             </p>
           </div>
-          <div className="bg-blue-100 p-4 rounded-2xl">
-            <DollarSign size={28} className="text-blue-600" />
+          <div className="bg-blue-50 p-4 rounded-2xl text-blue-500">
+            <DollarSign size={28} />
           </div>
         </div>
 
-        {isDelivery ? (
-          <>
-            <div
-              className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-orange-300 transition-colors"
-              onClick={() =>
-                document
-                  .getElementById("sessao-triagem")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
+        <div
+          className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-orange-300 transition-all"
+          onClick={() =>
+            document
+              .getElementById("sessao-triagem")
+              ?.scrollIntoView({ behavior: "smooth" })
+          }
+        >
+          <div>
+            <p className="text-sm text-slate-500 mb-1">Na Triagem</p>
+            <p
+              className={`text-3xl font-black ${pedidosNaTriagem.length > 0 ? "text-orange-600" : "text-slate-700"}`}
             >
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Na Triagem</p>
-                <p
-                  className={`text-3xl font-bold ${pedidosNaTriagem.length > 0 ? "text-orange-600" : "text-slate-700"}`}
-                >
-                  {pedidosNaTriagem.length}
-                </p>
-              </div>
-              <div className="bg-orange-100 p-4 rounded-2xl">
-                <AlertCircle size={28} className="text-orange-600" />
-              </div>
+              {pedidosNaTriagem.length}
+            </p>
+          </div>
+          <div className="bg-orange-50 p-4 rounded-2xl text-orange-500">
+            <AlertCircle size={28} />
+          </div>
+        </div>
+
+        {!isDelivery ? (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
+            <div>
+              <p className="text-sm text-slate-500 mb-1">Mesas Ativas</p>
+              <p className="text-3xl font-black text-amber-600">
+                {mesasAtivas}
+              </p>
             </div>
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Faturamento (Mês)</p>
-                <p className="text-2xl font-bold text-pink-600">
-                  {formatarDinheiro(faturamentoMesGlobal)}
-                </p>
-              </div>
-              <div className="bg-pink-100 p-4 rounded-2xl">
-                <ShoppingBag size={28} className="text-pink-600" />
-              </div>
+            <div className="bg-amber-50 p-4 rounded-2xl text-amber-500">
+              <Coffee size={28} />
             </div>
-          </>
+          </div>
         ) : (
-          <>
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Mesas Ativas</p>
-                <p className="text-3xl font-bold text-amber-600">
-                  {mesasAtivas}
-                </p>
-              </div>
-              <div className="bg-amber-100 p-4 rounded-2xl">
-                <Coffee size={28} className="text-amber-600" />
-              </div>
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
+            <div>
+              <p className="text-sm text-slate-500 mb-1">Vendas (Mês)</p>
+              <p className="text-2xl font-black text-pink-600">
+                {formatarDinheiro(faturamentoMesGlobal)}
+              </p>
             </div>
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex justify-between items-center">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Faturamento (Mês)</p>
-                <p className="text-2xl font-bold text-indigo-600">
-                  {formatarDinheiro(faturamentoMesGlobal)}
-                </p>
-              </div>
-              <div className="bg-indigo-100 p-4 rounded-2xl">
-                <BarChart3 size={28} className="text-indigo-600" />
-              </div>
+            <div className="bg-pink-50 p-4 rounded-2xl text-pink-500">
+              <ShoppingBag size={28} />
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-2 bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center mb-8">
-            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <BarChart3 className="text-blue-500" /> Receita da Semana
+      {/* 2. SEÇÃO DE TRIAGEM UNIVERSAL */}
+      <div id="sessao-triagem" className="scroll-mt-24">
+        {pedidosNaTriagem.length > 0 && (
+          <div className="bg-white p-8 rounded-3xl shadow-sm border-2 border-orange-100 mb-8">
+            <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+              Triagem de Novos Pedidos (Delivery)
+              <span className="bg-orange-100 text-orange-600 text-[10px] uppercase font-black px-3 py-1 rounded-full animate-pulse tracking-widest">
+                Aguardando Aprovação
+              </span>
             </h3>
-            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">
-              Últimos 7 dias
-            </span>
-          </div>
-          <div className="h-64 flex items-end gap-2 sm:gap-6 pt-6">
-            {dadosGrafico.map((dia, index) => {
-              const alturaPercentual = (dia.valor / maiorValorGrafico) * 100;
-              return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {pedidosNaTriagem.map((pedido) => (
                 <div
-                  key={index}
-                  className="flex-1 flex flex-col items-center gap-3 group"
+                  key={pedido.id}
+                  className="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative group"
                 >
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md mb-2">
-                    {formatarDinheiro(dia.valor)}
-                  </div>
-                  <div className="w-full relative bg-slate-50 rounded-t-xl overflow-hidden h-full flex items-end">
-                    <div
-                      className="w-full bg-blue-500 hover:bg-blue-400 transition-all duration-1000 ease-out rounded-t-xl"
-                      style={{
-                        height: `${alturaPercentual}%`,
-                        minHeight: dia.valor > 0 ? "4px" : "0px",
-                      }}
-                    ></div>
-                  </div>
-                  <p className="text-xs font-bold text-slate-400 uppercase">
-                    {dia.nome}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-          <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <Award className="text-amber-500" /> Top Produtos
-          </h3>
-          <div className="space-y-5">
-            {topProdutos.length === 0 ? (
-              <p className="text-slate-400 italic text-center py-10">
-                Aguardando vendas...
-              </p>
-            ) : (
-              topProdutos.map((produto, index) => (
-                <div key={index} className="flex items-center gap-4">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${index === 0 ? "bg-amber-100 text-amber-600" : index === 1 ? "bg-slate-200 text-slate-600" : index === 2 ? "bg-orange-100 text-orange-600" : "bg-slate-50 text-slate-400 border border-slate-100"}`}
-                  >
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-slate-800 line-clamp-1 text-sm">
-                      {produto.nome}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {produto.qtd} unid.
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-emerald-600">
-                      {formatarDinheiro(produto.receita)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isDelivery && (
-        <>
-          <div
-            id="sessao-triagem"
-            className="grid grid-cols-1 xl:grid-cols-2 gap-8 scroll-mt-24"
-          >
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-              <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                Triagem{" "}
-                <span className="bg-orange-100 text-orange-600 text-xs py-1 px-3 rounded-full">
-                  {pedidosNaTriagem.length} novos
-                </span>
-              </h3>
-              <div className="space-y-4">
-                {pedidosNaTriagem.length === 0 ? (
-                  <p className="text-slate-400 italic">Nenhum pedido novo.</p>
-                ) : (
-                  pedidosNaTriagem.map((pedido) => (
-                    <div
-                      key={pedido.id}
-                      className="bg-slate-50 p-5 rounded-2xl border border-slate-200"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg">
-                          Entrega: {formatarDataEHora(pedido.dataEntrega)}
-                        </span>
-                        <p className="font-black text-pink-600 text-lg">
-                          {formatarDinheiro(pedido.valorTotal)}
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold text-slate-700 mb-4">
-                        {formatarItensPedido(pedido.itens)}
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                        Cliente
+                      </span>
+                      <p className="font-bold text-slate-800 text-lg leading-tight">
+                        {pedido.cliente}
                       </p>
-
-                      <div className="border-t border-slate-200 pt-4 mt-2">
-                        {editandoId === pedido.id ? (
-                          <div className="space-y-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                              Revisão e Dados Fiscais
-                            </p>
-                            <div>
-                              <label className="block text-xs font-medium text-slate-600 mb-1">
-                                CPF ou CNPJ
-                              </label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={editDocumento}
-                                  onChange={(e) =>
-                                    setEditDocumento(e.target.value)
-                                  }
-                                  placeholder="000.000.000-00"
-                                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-pink-400 outline-none"
-                                />
-                                <button
-                                  onClick={buscarClienteNoCRM}
-                                  className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition"
-                                >
-                                  Buscar
-                                </button>
-                              </div>
-                            </div>
-                            <input
-                              type="text"
-                              value={editNome}
-                              onChange={(e) => setEditNome(e.target.value)}
-                              className="w-full border border-slate-200 p-2.5 text-sm rounded-lg focus:ring-2 focus:ring-pink-400 outline-none"
-                              placeholder="Nome do Cliente"
-                            />
-                            <input
-                              type="text"
-                              value={editTelefone}
-                              onChange={(e) => setEditTelefone(e.target.value)}
-                              className="w-full border border-slate-200 p-2.5 text-sm rounded-lg focus:ring-2 focus:ring-pink-400 outline-none"
-                              placeholder="WhatsApp"
-                            />
-                            <input
-                              type="text"
-                              value={editEndereco}
-                              onChange={(e) => setEditEndereco(e.target.value)}
-                              placeholder="Endereço de Entrega/Faturamento"
-                              className="w-full text-sm border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-pink-400 outline-none"
-                            />
-                            <label className="flex items-center gap-3 py-3 cursor-pointer bg-emerald-50 border border-emerald-100 rounded-lg px-4">
-                              <input
-                                type="checkbox"
-                                checked={sinalPago}
-                                onChange={(e) => setSinalPago(e.target.checked)}
-                                className="w-5 h-5 accent-emerald-600"
-                              />
-                              <span className="text-sm font-bold text-emerald-800">
-                                Sinal de 50% Recebido via Pix
-                              </span>
-                            </label>
-                            <div className="flex gap-2 pt-2">
-                              <button
-                                onClick={() => aceitarPedido(pedido)}
-                                className="flex-1 bg-slate-900 hover:bg-pink-600 text-white py-3 rounded-lg font-bold text-sm transition-colors"
-                              >
-                                Confirmar e Agendar
-                              </button>
-                              <button
-                                onClick={() => setEditandoId(null)}
-                                className="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-lg font-bold text-sm transition"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-slate-800">
-                                {pedido.cliente}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {pedido.telefone || "Sem telefone"} •{" "}
-                                {pedido.status === "aguardando_pix"
-                                  ? "Aguardando Pix"
-                                  : "Pendente"}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => iniciarEdicao(pedido)}
-                              className="text-sm bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-lg font-bold transition"
-                            >
-                              Avaliar
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        <Phone size={12} /> {pedido.telefone}
+                      </p>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-              <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                <Clock className="text-blue-500" /> Agendados para Hoje
-              </h3>
-              <div className="space-y-4">
-                {pedidosDeHoje.length === 0 ? (
-                  <p className="text-slate-400 italic">
-                    Agenda livre para hoje!
-                  </p>
-                ) : (
-                  pedidosDeHoje.map((pedido) => (
-                    <div
-                      key={pedido.id}
-                      className="flex justify-between items-center bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm"
-                    >
-                      <div>
-                        <p className="font-bold text-lg text-slate-800">
-                          {pedido.cliente}
-                        </p>
-                        <p className="text-slate-500 text-sm mt-1">
-                          {formatarItensPedido(pedido.itens)}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg ${pedido.status === "agendado" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}
-                      >
-                        {pedido.status === "agendado"
-                          ? "Na Fila"
-                          : "Em Preparo"}
+                    <div className="text-right">
+                      <span className="text-xs font-black bg-white px-2 py-1 rounded-lg border shadow-sm">
+                        {formatarDinheiro(pedido.valorTotal)}
                       </span>
                     </div>
-                  ))
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 mb-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase mb-2">
+                      Itens do Pedido
+                    </p>
+                    <p className="text-sm text-slate-700 font-medium">
+                      {formatarItensPedido(pedido.itens)}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => aprovarPedido(pedido)}
+                      className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-sm hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle size={16} /> Aceitar Pedido
+                    </button>
+                    <button
+                      onClick={() => abrirEdicao(pedido)}
+                      className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition"
+                      title="Editar dados ou buscar cadastro"
+                    >
+                      <FileText size={18} />
+                    </button>
+                    <button
+                      onClick={() => cancelarPedido(pedido.id)}
+                      className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. COLUNAS DE CONTEÚDO PRINCIPAL */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="xl:col-span-2 space-y-8">
+          {!isDelivery && !configLoja?.modulos?.includes("kds") && (
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-amber-100">
+              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                <Package className="text-amber-500" /> Fila de Produção (Salão)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pedidos.filter(
+                  (p) =>
+                    (p.origem === "mesa" || p.origem === "garcom") &&
+                    p.status === "agendado",
+                ).length === 0 ? (
+                  <div className="md:col-span-2 py-10 text-center text-slate-400">
+                    <CheckCircle
+                      size={40}
+                      className="mx-auto mb-2 opacity-20"
+                    />
+                    <p className="italic">
+                      Tudo pronto! Nenhuma ordem pendente.
+                    </p>
+                  </div>
+                ) : (
+                  pedidos
+                    .filter(
+                      (p) =>
+                        (p.origem === "mesa" || p.origem === "garcom") &&
+                        p.status === "agendado",
+                    )
+                    .map((p) => (
+                      <div
+                        key={p.id}
+                        className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center"
+                      >
+                        <div>
+                          <p className="font-black text-slate-800">
+                            {p.cliente}
+                          </p>
+                          <p className="text-xs text-slate-500 line-clamp-1">
+                            {formatarItensPedido(p.itens)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            updateDoc(doc(db, "pedidos", p.id), {
+                              status: "pronto",
+                            })
+                          }
+                          className="bg-emerald-500 text-white px-4 py-2 rounded-lg font-black text-[10px] uppercase hover:bg-emerald-600 transition shadow-sm"
+                        >
+                          Pronto
+                        </button>
+                      </div>
+                    ))
                 )}
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">
-              Grade da Semana
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+            <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-2">
+              <BarChart3 className="text-blue-500" /> Movimentação da Semana
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              {diasSemana.map((dia) => {
+            <div className="grid grid-cols-7 gap-4 items-end h-64">
+              {getDiasDaSemana().map((dia) => {
                 const pedidosDoDia = pedidos.filter(
                   (p) =>
-                    p.dataEntrega &&
-                    p.dataEntrega.startsWith(dia.dataBusca) &&
-                    ![
-                      "pendente",
-                      "aguardando_pix",
-                      "entregue",
-                      "cancelado",
-                    ].includes(p.status) &&
-                    p.origem !== "mesa" &&
-                    p.origem !== "garcom",
+                    p.criadoEm.startsWith(dia.dataBusca) &&
+                    p.status !== "cancelado",
                 );
+                const totalDia = pedidosDoDia.reduce(
+                  (acc, p) => acc + (p.valorTotal || 0),
+                  0,
+                );
+                const maxFaturamento = 1000;
+                const altura = Math.min((totalDia / maxFaturamento) * 100, 100);
                 const isDiaHoje = isHoje(dia.dataBusca + "T00:00");
+
                 return (
                   <div
                     key={dia.dataBusca}
-                    className={`flex flex-col items-center p-5 rounded-2xl border ${isDiaHoje ? "bg-pink-50 border-pink-200" : "bg-slate-50 border-slate-100"}`}
+                    className="flex flex-col items-center gap-3 group relative"
                   >
+                    <div className="absolute -top-8 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                      {formatarDinheiro(totalDia)}
+                    </div>
+                    <div
+                      className={`w-full rounded-xl transition-all duration-500 ${isDiaHoje ? "bg-pink-500 shadow-lg shadow-pink-200" : "bg-slate-200 group-hover:bg-slate-300"}`}
+                      style={{ height: `${Math.max(altura, 5)}%` }}
+                    />
                     <span
-                      className={`text-xs font-black uppercase mb-1 ${isDiaHoje ? "text-pink-600" : "text-slate-400"}`}
+                      className={`text-[10px] font-black uppercase ${isDiaHoje ? "text-pink-600" : "text-slate-400"}`}
                     >
-                      {dia.nome}
+                      {dia.nome.substring(0, 3)}
                     </span>
-                    <span
-                      className={`text-3xl font-black mb-3 ${isDiaHoje ? "text-pink-700" : "text-slate-700"}`}
-                    >
-                      {dia.numero}
-                    </span>
-                    {pedidosDoDia.length > 0 ? (
-                      <span className="bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg w-full text-center">
-                        {pedidosDoDia.length} pedidos
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 text-xs font-medium px-3 py-1.5 w-full text-center border border-dashed rounded-lg">
-                        Livre
-                      </span>
-                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-        </>
+        </div>
+
+        <div className="space-y-8">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2">
+              <Award className="text-amber-500" /> Mais Vendidos
+            </h3>
+            <p className="text-xs text-slate-400 italic text-center py-4">
+              Módulo de inteligência de vendas ativo.
+            </p>
+          </div>
+
+          <div className="bg-slate-900 rounded-3xl p-6 shadow-xl text-white">
+            <h3 className="font-black mb-6 flex items-center gap-2">
+              <Clock className="text-pink-400" /> Agendados para Hoje
+            </h3>
+            <div className="space-y-3">
+              {pedidos.filter(
+                (p) =>
+                  p.status === "agendado" &&
+                  p.dataEntrega &&
+                  isHoje(p.dataEntrega),
+              ).length === 0 ? (
+                <p className="text-slate-500 text-sm italic">
+                  Nenhuma entrega agendada para hoje.
+                </p>
+              ) : (
+                pedidos
+                  .filter(
+                    (p) =>
+                      p.status === "agendado" &&
+                      p.dataEntrega &&
+                      isHoje(p.dataEntrega),
+                  )
+                  .map((p) => (
+                    <div
+                      key={p.id}
+                      className="bg-slate-800/50 p-3 rounded-xl border border-white/5 flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="font-bold text-sm">{p.cliente}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {new Date(p.dataEntrega).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <span className="text-pink-400 font-black text-xs">
+                        {formatarDinheiro(p.valorTotal)}
+                      </span>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL DE EDIÇÃO RÁPIDA COM BUSCA NO CRM */}
+      {editandoId && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[95vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                <FileText className="text-blue-500" /> Editar Pedido
+              </h2>
+              <button
+                onClick={() => setEditandoId(null)}
+                className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                  Telefone / WhatsApp
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editTelefone}
+                    onChange={(e) => setEditTelefone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                    className="flex-1 border p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none font-medium"
+                  />
+                  <button
+                    onClick={buscarDadosClienteNoCadastro}
+                    className="bg-blue-50 text-blue-600 p-3 rounded-xl hover:bg-blue-100 transition"
+                    title="Buscar no Cadastro de Clientes"
+                  >
+                    <Search size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                  Nome do Cliente
+                </label>
+                <input
+                  type="text"
+                  value={editNome}
+                  onChange={(e) => setEditNome(e.target.value)}
+                  placeholder="Nome Completo"
+                  className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                  Endereço de Entrega
+                </label>
+                <textarea
+                  value={editEndereco}
+                  onChange={(e) => setEditEndereco(e.target.value)}
+                  placeholder="Rua, Número, Bairro..."
+                  className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none"
+                  rows="2"
+                />
+              </div>
+
+              {/* NOVO CAMPO: VALOR PAGO VIA PIX */}
+              <div className="border-t border-slate-100 pt-4 mt-2">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                  Valor Pago (Pix Recebido)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editValorPago}
+                  onChange={(e) => setEditValorPago(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none font-black text-emerald-600"
+                />
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                <input
+                  type="checkbox"
+                  checked={sinalPago}
+                  onChange={(e) => setSinalPago(e.target.checked)}
+                  className="w-5 h-5 accent-emerald-600"
+                />
+                <div>
+                  <span className="font-bold text-emerald-800 text-sm block">
+                    Confirmar Pagamento
+                  </span>
+                  <span className="text-[10px] text-emerald-600">
+                    Aprova o pedido e envia para produção.
+                  </span>
+                </div>
+              </label>
+
+              <button
+                onClick={salvarAlteracoes}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition flex items-center justify-center gap-2 shadow-lg active:scale-95 mt-4"
+              >
+                <Save size={20} /> Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

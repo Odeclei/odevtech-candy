@@ -1,382 +1,701 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 // ==========================================
-// DADOS DO CARROSSEL DE SOLUÇÕES
+// 1. COMPONENTE: CANVAS DE PARTÍCULAS (DOTS)
 // ==========================================
-const SOLUCOES = [
-    {
-        id: "transapp",
-        titulo: "TransApp Frotas",
-        icone: "fas fa-truck-fast",
-        descricao:
-            "O controle definitivo para sua transportadora. Gestão completa de viagens, controle rigoroso de despesas (pedágio, combustível, manutenção), adiantamentos e saldo de fretes.",
-        features: [
-            "DRE por Viagem",
-            "Controle de Categorias de Gasto",
-            "Histórico de Veículos",
-        ],
-        link: "https://transapp.odevtech.com.br",
-        textoLink: "Acessar TransApp",
-        cores: {
-            bgGeral:
-                "hover:border-blue-300 dark:hover:border-blue-500 hover:shadow-blue-900/5 dark:hover:shadow-blue-900/20",
-            bgEfeito: "bg-blue-100 dark:bg-blue-900/30",
-            bgIcone:
-                "bg-blue-600 text-white shadow-blue-200 dark:shadow-blue-900/40",
-            textCheck: "text-blue-500",
-            textLink:
-                "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
-        },
-    },
-    {
-        id: "confeitaria",
-        titulo: "OdevTech Confeitaria",
-        icone: "fas fa-cake-candles",
-        descricao:
-            "O sistema ideal para confeiteiras e docerias artesanais. Acabe com a confusão no WhatsApp com um catálogo digital inteligente, quadro de produção visual e fluxo de caixa.",
-        features: [
-            "Catálogo Direto no WhatsApp",
-            "Quadro Kanban de Produção",
-            "Controle de Sinais (50% Pago)",
-        ],
-        link: "/crisdoces",
-        textoLink: "Ver Demonstração",
-        cores: {
-            bgGeral:
-                "hover:border-pink-300 dark:hover:border-pink-500 hover:shadow-pink-900/5 dark:hover:shadow-pink-900/20",
-            bgEfeito: "bg-pink-100 dark:bg-pink-900/20",
-            bgIcone:
-                "bg-pink-600 text-white shadow-pink-200 dark:shadow-pink-900/40",
-            textCheck: "text-pink-500",
-            textLink:
-                "text-pink-600 dark:text-pink-400 hover:text-pink-800 dark:hover:text-pink-300",
-        },
-    },
-    {
-        id: "bares",
-        titulo: "OdevTech Bares & Restaurantes",
-        icone: "fas fa-beer-mug-empty",
-        descricao:
-            "Operação rápida e sem atritos. O cliente pede pelo celular, a cozinha recebe direto na tela, e o caixa fatura com precisão. Controle de estoque integrado.",
-        features: [
-            "Autoatendimento (QR Code na Mesa)",
-            "Painel de Cozinha (KDS)",
-            "Ficha Técnica e Custo Real",
-        ],
-        link: "/barteste",
-        textoLink: "Ver Demonstração",
-        cores: {
-            bgGeral:
-                "hover:border-amber-300 dark:hover:border-amber-500 hover:shadow-amber-900/5 dark:hover:shadow-amber-900/20",
-            bgEfeito: "bg-amber-100 dark:bg-amber-900/20",
-            bgIcone:
-                "bg-amber-500 text-white shadow-amber-200 dark:shadow-amber-900/40",
-            textCheck: "text-amber-500",
-            textLink:
-                "text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300",
-        },
-    },
-];
-
-export default function Inicial() {
-    const [isDark, setIsDark] = useState(false);
-
-    // Estados do Carrossel
-    const [slideAtual, setSlideAtual] = useState(0);
-    const [isHovered, setIsHovered] = useState(false);
+const ParticleCanvas = () => {
+    const canvasRef = useRef(null);
+    const mouseRef = useRef({ x: null, y: null });
 
     useEffect(() => {
-        if (
-            localStorage.getItem("color-theme") === "dark" ||
-            (!("color-theme" in localStorage) &&
-                window.matchMedia("(prefers-color-scheme: dark)").matches)
-        ) {
-            document.documentElement.classList.add("dark");
-            setIsDark(true);
-        } else {
-            document.documentElement.classList.remove("dark");
-            setIsDark(false);
-        }
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        let animationFrameId;
+        let particles = [];
+        let width, height;
+
+        const initCanvas = () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            const particleCount = Math.floor((width * height) / 15000);
+
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    radius: Math.random() * 1.5 + 0.5,
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: (Math.random() - 0.5) * 0.4,
+                });
+            }
+        };
+
+        const animate = () => {
+            ctx.clearRect(0, 0, width, height);
+
+            particles.forEach((p, index) => {
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (p.x < 0 || p.x > width) p.vx *= -1;
+                if (p.y < 0 || p.y > height) p.vy *= -1;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle =
+                    index % 4 === 0
+                        ? "rgba(59, 130, 246, 0.4)"
+                        : "rgba(255, 255, 255, 0.2)";
+                ctx.fill();
+
+                for (let j = index + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    const dx = p.x - p2.x;
+                    const dy = p.y - p2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 100) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle =
+                            index % 4 === 0
+                                ? `rgba(59, 130, 246, ${0.15 - dist / 1000})`
+                                : `rgba(255, 255, 255, ${0.08 - dist / 1000})`;
+                        ctx.stroke();
+                    }
+                }
+
+                if (mouseRef.current.x != null) {
+                    const dxMouse = p.x - mouseRef.current.x;
+                    const dyMouse = p.y - mouseRef.current.y;
+                    const distMouse = Math.sqrt(
+                        dxMouse * dxMouse + dyMouse * dyMouse,
+                    );
+                    if (distMouse < 150) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(mouseRef.current.x, mouseRef.current.y);
+                        ctx.strokeStyle = `rgba(59, 130, 246, ${0.1 - distMouse / 1500})`;
+                        ctx.stroke();
+                    }
+                }
+            });
+
+            animationFrameId = requestAnimationFrame(animate);
+        };
+
+        initCanvas();
+        animate();
+
+        window.addEventListener("resize", initCanvas);
+
+        const handleMouseMove = (e) => {
+            mouseRef.current = { x: e.clientX, y: e.clientY };
+        };
+        const handleMouseLeave = () => {
+            mouseRef.current = { x: null, y: null };
+        };
+
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseleave", handleMouseLeave);
+
+        return () => {
+            window.removeEventListener("resize", initCanvas);
+            window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mouseleave", handleMouseLeave);
+            cancelAnimationFrame(animationFrameId);
+        };
     }, []);
 
-    const toggleTheme = () => {
-        if (isDark) {
-            document.documentElement.classList.remove("dark");
-            localStorage.setItem("color-theme", "light");
-            setIsDark(false);
-        } else {
-            document.documentElement.classList.add("dark");
-            localStorage.setItem("color-theme", "dark");
-            setIsDark(true);
-        }
-    };
+    return (
+        <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full z-0 opacity-60 pointer-events-none"
+        />
+    );
+};
 
-    // Auto-Play do Carrossel
+// ==========================================
+// 2. COMPONENTE: EFEITO REVEAL (APPLE STYLE)
+// ==========================================
+const Reveal = ({ children, delay = 0, className = "" }) => {
+    const domRef = useRef();
+    const [isVisible, setVisible] = useState(false);
+
     useEffect(() => {
-        if (isHovered) return; // Pausa se o rato estiver em cima
-        const timer = setInterval(() => {
-            setSlideAtual((prev) => (prev + 1) % SOLUCOES.length);
-        }, 4000); // Roda a cada 4 segundos
-        return () => clearInterval(timer);
-    }, [isHovered]);
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    setVisible(true);
+                    observer.unobserve(domRef.current);
+                }
+            },
+            { threshold: 0.15, rootMargin: "0px 0px -50px 0px" },
+        );
+
+        if (domRef.current) observer.observe(domRef.current);
+        return () => observer.disconnect();
+    }, []);
 
     return (
-        <div className="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 antialiased transition-colors duration-300 min-h-screen">
-            {/* */}
-            <nav className="fixed w-full bg-white/90 dark:bg-slate-950/90 backdrop-blur-md z-50 border-b border-slate-200 dark:border-slate-800 transition-colors duration-300">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-20">
-                        {/* */}
-                        <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-200 dark:shadow-blue-900/20">
-                                <i className="fas fa-layer-group text-white text-xl"></i>
-                            </div>
-                            <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white transition-colors duration-300">
-                                Odev
-                                <span className="text-blue-600 dark:text-blue-500">
-                                    Tech
-                                </span>
-                            </span>
-                        </div>
+        <div
+            ref={domRef}
+            className={`transition-all duration-1000 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"} ${className}`}
+            style={{ transitionDelay: `${delay}ms` }}
+        >
+            {children}
+        </div>
+    );
+};
 
-                        {/* */}
-                        <div className="hidden md:flex items-center space-x-8">
-                            <a
-                                href="#solucoes"
-                                className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 font-medium transition-colors"
-                            >
-                                Nossas Soluções
-                            </a>
-                            <a
-                                href="#sobre"
-                                className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 font-medium transition-colors"
-                            >
-                                Como Funciona
-                            </a>
+// ==========================================
+// 3. COMPONENTE: LOGOTIPO VETORIZADO
+// ==========================================
+const Logo = () => (
+    <a href="#" className="flex items-center cursor-pointer group">
+        <svg
+            width="28"
+            height="28"
+            viewBox="0 0 100 100"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="mr-3 transform group-hover:scale-105 transition-transform"
+        >
+            <path
+                d="M 25 25 L 45 25 L 45 75 L 25 75 Z"
+                stroke="white"
+                strokeWidth="12"
+                strokeLinejoin="round"
+                fill="none"
+            />
+            <path
+                d="M 60 25 L 95 25 M 77.5 25 L 77.5 75"
+                stroke="white"
+                strokeWidth="12"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <circle
+                cx="25"
+                cy="50"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+            <circle
+                cx="45"
+                cy="25"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+            <circle
+                cx="45"
+                cy="75"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+            <circle
+                cx="77.5"
+                cy="25"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+            <circle
+                cx="95"
+                cy="25"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+            <circle
+                cx="77.5"
+                cy="75"
+                r="8"
+                fill="white"
+                stroke="#2563eb"
+                strokeWidth="6"
+            />
+        </svg>
+        <span className="text-xl font-bold tracking-tight text-white">
+            Odev<span className="font-light text-gray-400">Tech</span>
+        </span>
+    </a>
+);
 
-                            <button
-                                onClick={toggleTheme}
-                                type="button"
-                                className="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none rounded-lg text-lg p-2.5 transition-colors"
-                            >
-                                {isDark ? (
-                                    <i className="fas fa-sun"></i>
-                                ) : (
-                                    <i className="fas fa-moon"></i>
-                                )}
-                            </button>
+// ==========================================
+// 4. PÁGINA PRINCIPAL
+// ==========================================
+export default function Inicial() {
+    const [isScrolled, setIsScrolled] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-                            <Link
-                                to="/crisdoces"
-                                className="inline-flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold hover:text-pink-800 dark:hover:text-pink-300 transition-colors relative z-10"
-                            >
-                                Ver Demonstração{" "}
-                                <i className="fas fa-arrow-right text-sm"></i>
-                            </Link>
-                        </div>
+    useEffect(() => {
+        const handleScroll = () => setIsScrolled(window.scrollY > 20);
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
 
-                        {/* */}
-                        <div className="md:hidden flex items-center gap-4">
-                            <button
-                                onClick={toggleTheme}
-                                type="button"
-                                className="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none rounded-lg text-lg p-2.5 transition-colors"
-                            >
-                                {isDark ? (
-                                    <i className="fas fa-sun"></i>
-                                ) : (
-                                    <i className="fas fa-moon"></i>
-                                )}
-                            </button>
-                            <button className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white focus:outline-none transition-colors">
-                                <i className="fas fa-bars text-2xl"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </nav>
+    const navLinks = [
+        { name: "Ecossistema", href: "#produtos" },
+        { name: "Tecnologia", href: "#tecnologia" },
+        { name: "Portal do Cliente", href: "/login" },
+    ];
 
-            {/* */}
-            <section className="pt-32 pb-20 md:pt-48 md:pb-32 px-4 overflow-hidden relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-blue-100/50 dark:bg-blue-900/20 rounded-full blur-3xl -z-10 transition-colors duration-300"></div>
+    // CARDS OFICIAIS DO ECOSSISTEMA ODEVTECH COM URLS CORRIGIDAS (Absolutas)
+    const produtos = [
+        {
+            id: "OdevBar",
+            icon: "fa-beer-mug-empty",
+            title: "OdevBar",
+            desc: "Frente de caixa (PDV) ágil, controle de mesas e comandas, fluxo de cozinha (KDS) e emissão fiscal (NFC-e/NF-e) automatizada.",
+            img: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=800",
+            color: "text-amber-500",
+            hoverBg: "group-hover:bg-amber-600",
+            hoverBorder: "hover:border-amber-500/30",
+            url: "https://wa.me/5547999545703",
+        },
+        {
+            id: "OdevConf",
+            icon: "fa-cake-candles",
+            title: "OdevConf",
+            desc: "Catálogo digital, gestão de estoque, fichas técnicas avançadas (Engenharia de Cardápio) e Kanban interativo de produção.",
+            img: "https://images.unsplash.com/photo-1557308536-ee471ef2c390?auto=format&fit=crop&q=80&w=800",
+            color: "text-pink-500",
+            hoverBg: "group-hover:bg-pink-600",
+            hoverBorder: "hover:border-pink-500/30",
+            url: "https://wa.me/5547999545703",
+        },
+        {
+            id: "OdevLog",
+            icon: "fa-truck-fast",
+            title: "OdevLog",
+            desc: "Gestão ponta a ponta para frotas e transportadoras. Controle de viagens, manutenções, despesas correntes, acertos e DRE.",
+            img: "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&q=80&w=800",
+            color: "text-blue-500",
+            hoverBg: "group-hover:bg-blue-600",
+            hoverBorder: "hover:border-blue-500/30",
+            url: "https://log.odevtech.com.br",
+        },
+        {
+            id: "OdevDesk",
+            icon: "fa-robot",
+            title: "OdevDesk",
+            desc: "CRM com IA embarcada. Chatbot integrado ao WhatsApp para triagem de leads, automação de atendimento e gestão do funil de vendas.",
+            img: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800",
+            color: "text-emerald-500",
+            hoverBg: "group-hover:bg-emerald-600",
+            hoverBorder: "hover:border-emerald-500/30",
+            url: "https://wa.me/5547999545703",
+        },
+    ];
 
-                <div className="max-w-4xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 dark:bg-slate-800/80 border border-blue-100 dark:border-slate-700 text-blue-700 dark:text-blue-400 font-medium text-sm mb-8 transition-colors duration-300">
-                        <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 dark:bg-blue-500 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500 dark:bg-blue-400"></span>
-                        </span>
-                        Sistemas modulares para a sua empresa
-                    </div>
+    return (
+        <div className="bg-black text-white min-h-screen font-sans selection:bg-blue-600 selection:text-white">
+            <style>{`
+                ::-webkit-scrollbar { width: 8px; }
+                ::-webkit-scrollbar-track { background: #000; }
+                ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+                ::-webkit-scrollbar-thumb:hover { background: #555; }
+                .text-gradient {
+                    background: linear-gradient(180deg, #ffffff 0%, #737373 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                }
+            `}</style>
 
-                    <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight mb-6 transition-colors duration-300">
-                        Gestão inteligente para{" "}
-                        <br className="hidden md:block" />
-                        <span className="text-blue-600 dark:text-blue-500">
-                            operações que não param.
-                        </span>
-                    </h1>
-
-                    <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed transition-colors duration-300">
-                        Abandone planilhas confusas e cadernos. A OdevTech
-                        constrói o ecossistema tecnológico personalizado para
-                        sua empresa <b>Evoluir</b>.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row justify-center gap-4">
-                        <a
-                            href="#solucoes"
-                            className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-blue-900/20 flex items-center justify-center gap-2"
-                        >
-                            Conhecer Soluções{" "}
-                            <i className="fas fa-arrow-right"></i>
-                        </a>
+            <nav
+                className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
+                    isScrolled
+                        ? "bg-black/60 backdrop-blur-xl border-b border-white/5 py-3"
+                        : "bg-transparent py-5"
+                }`}
+            >
+                <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-16">
+                    <Logo />
+                    <div className="hidden md:flex items-center space-x-8 text-xs font-medium text-gray-400 tracking-wide">
+                        {navLinks.map((link) =>
+                            link.href.startsWith("/") ? (
+                                <Link
+                                    key={link.name}
+                                    to={link.href}
+                                    className="hover:text-white transition-colors"
+                                >
+                                    {link.name}
+                                </Link>
+                            ) : (
+                                <a
+                                    key={link.name}
+                                    href={link.href}
+                                    className="hover:text-white transition-colors"
+                                >
+                                    {link.name}
+                                </a>
+                            ),
+                        )}
                         <a
                             href="https://wa.me/5547999545703"
-                            className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-2 border-slate-200 dark:border-slate-700 px-8 py-4 rounded-xl font-bold text-lg hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-700 transition-colors"
                         >
-                            <i className="fab fa-whatsapp text-green-500 text-xl"></i>
                             Falar com Consultor
                         </a>
                     </div>
-                </div>
-            </section>
-
-            {/* */}
-            <section
-                id="solucoes"
-                className="py-20 bg-white dark:bg-slate-950 border-y border-slate-100 dark:border-slate-900 transition-colors duration-300"
-            >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4 transition-colors duration-300">
-                            Escolha seu Módulo
-                        </h2>
-                        <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto transition-colors duration-300">
-                            Nossos sistemas funcionam de forma independente.
-                            Você assina apenas o que precisa hoje e expande
-                            quando quiser.
-                        </p>
-                    </div>
-
-                    {/* Janela de Exibição do Carrossel */}
-                    <div
-                        className="overflow-hidden relative w-full max-w-4xl mx-auto pb-10"
-                        onMouseEnter={() => setIsHovered(true)}
-                        onMouseLeave={() => setIsHovered(false)}
+                    <button
+                        className="md:hidden text-2xl text-white focus:outline-none"
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                     >
-                        <div
-                            className="flex transition-transform duration-700 ease-in-out"
-                            style={{
-                                transform: `translateX(-${slideAtual * 100}%)`,
-                            }}
-                        >
-                            {SOLUCOES.map((solucao) => (
-                                <div
-                                    className="w-full flex-shrink-0 px-2 sm:px-4"
-                                    key={solucao.id}
-                                >
-                                    <div
-                                        className={`group bg-slate-50 dark:bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-slate-800 transition-all duration-300 relative overflow-hidden shadow-sm hover:shadow-2xl ${solucao.cores.bgGeral}`}
-                                    >
-                                        <div
-                                            className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 ${solucao.cores.bgEfeito}`}
-                                        ></div>
+                        <i
+                            className={`fa-solid ${isMobileMenuOpen ? "fa-times" : "fa-bars"}`}
+                        ></i>
+                    </button>
+                </div>
+                {isMobileMenuOpen && (
+                    <div className="absolute top-full left-0 w-full bg-[#0a0a0a] border-b border-white/10 shadow-xl py-4 flex flex-col space-y-4 px-6 md:hidden">
+                        {navLinks.map((link) => (
+                            <a
+                                key={link.name}
+                                href={link.href}
+                                className="text-sm font-medium text-gray-300 hover:text-white"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                {link.name}
+                            </a>
+                        ))}
+                    </div>
+                )}
+            </nav>
 
-                                        <div
-                                            className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl mb-8 relative z-10 shadow-lg ${solucao.cores.bgIcone}`}
-                                        >
-                                            <i className={solucao.icone}></i>
+            <main>
+                {/* HERO */}
+                <section className="relative min-h-screen flex flex-col justify-center items-center text-center px-4 pt-20 overflow-hidden bg-black">
+                    <ParticleCanvas />
+                    <Reveal className="relative z-10 max-w-4xl mx-auto space-y-8">
+                        <span className="inline-block py-1 px-3 rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold tracking-widest uppercase text-gray-400 mb-4 backdrop-blur-sm">
+                            OdevTech SaaS Ecosystem
+                        </span>
+                        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-tight">
+                            Tecnologia que move <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-blue-200">
+                                seu negócio adiante.
+                            </span>
+                        </h1>
+                        <p className="text-lg md:text-2xl text-gray-400 max-w-2xl mx-auto font-light leading-relaxed tracking-tight">
+                            Soluções escaláveis e sistemas modulares
+                            desenvolvidos para quem não tem tempo a perder com
+                            planilhas.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+                            <a
+                                href="#produtos"
+                                className="bg-blue-600 text-white px-8 py-3.5 rounded-full text-sm font-medium hover:bg-blue-700 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)]"
+                            >
+                                Conhecer Soluções
+                            </a>
+                        </div>
+                    </Reveal>
+                    <div className="absolute bottom-10 animate-bounce">
+                        <i className="fa-solid fa-chevron-down text-gray-600 text-xl"></i>
+                    </div>
+                </section>
+
+                {/* SUÍTE DE PRODUTOS (CARDS PRINCIPAIS) */}
+                <section id="produtos" className="py-24 px-6 bg-[#050505]">
+                    <div className="max-w-7xl mx-auto">
+                        <Reveal className="mb-20 text-center md:text-left">
+                            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">
+                                O Sistema Certo.
+                            </h2>
+                            <p className="text-lg text-gray-400 font-light">
+                                Escolha o módulo nativo para o seu segmento e
+                                assuma o controle.
+                            </p>
+                        </Reveal>
+
+                        {/* GRID 2x2 PARA OS 4 PRODUTOS - CARDS GRANDES */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {produtos.map((prod, index) => (
+                                <Reveal
+                                    key={index}
+                                    delay={index * 100}
+                                    className={`group bg-[#0a0a0a] border border-white/5 rounded-3xl p-8 hover:bg-[#111] transition-all duration-500 flex flex-col relative overflow-hidden ${prod.hoverBorder}`}
+                                >
+                                    <div className="relative z-10 flex flex-col h-full min-h-[220px]">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div
+                                                className={`w-14 h-14 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center text-2xl ${prod.color} transition-all duration-500 ${prod.hoverBg} group-hover:text-white group-hover:scale-110 group-hover:border-transparent shadow-lg`}
+                                            >
+                                                <i
+                                                    className={`fa-solid ${prod.icon}`}
+                                                ></i>
+                                            </div>
+                                            <span className="text-xs font-bold tracking-widest uppercase text-gray-600 group-hover:text-white transition-colors border border-white/10 px-3 py-1 rounded-full">
+                                                {prod.id}
+                                            </span>
                                         </div>
 
-                                        <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-4 relative z-10 transition-colors duration-300">
-                                            {solucao.titulo}
+                                        <h3 className="text-2xl font-bold tracking-tight text-white mb-3">
+                                            {prod.title}
                                         </h3>
-
-                                        <p className="text-lg text-slate-600 dark:text-slate-400 mb-8 leading-relaxed relative z-10 transition-colors duration-300">
-                                            {solucao.descricao}
+                                        <p className="text-gray-400 text-base font-light leading-relaxed mb-8 flex-grow">
+                                            {prod.desc}
                                         </p>
 
-                                        <ul className="space-y-4 mb-10 relative z-10">
-                                            {solucao.features.map(
-                                                (feature, index) => (
-                                                    <li
-                                                        key={index}
-                                                        className="flex items-center gap-3 text-slate-700 dark:text-slate-300 font-bold transition-colors duration-300"
-                                                    >
-                                                        <i
-                                                            className={`fas fa-check-circle text-xl ${solucao.cores.textCheck}`}
-                                                        ></i>{" "}
-                                                        {feature}
-                                                    </li>
-                                                ),
-                                            )}
-                                        </ul>
-
-                                        {solucao.link.startsWith("http") ? (
+                                        <div className="mt-auto flex items-center text-sm font-semibold text-white/50 group-hover:text-white transition-colors z-20">
                                             <a
-                                                href={solucao.link}
-                                                className={`inline-flex items-center gap-2 font-bold transition-colors relative z-10 text-lg ${solucao.cores.textLink}`}
+                                                href={prod.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-2 hover:text-white transition-colors"
                                             >
-                                                {solucao.textoLink}{" "}
-                                                <i className="fas fa-arrow-right text-sm"></i>
+                                                <i className="fa-solid fa-arrow-right text-xs group-hover:translate-x-1 transition-transform"></i>
+                                                Solicitar Demonstração
                                             </a>
-                                        ) : (
-                                            <Link
-                                                to={solucao.link}
-                                                className={`inline-flex items-center gap-2 font-bold transition-colors relative z-10 text-lg ${solucao.cores.textLink}`}
-                                            >
-                                                {solucao.textoLink}{" "}
-                                                <i className="fas fa-arrow-right text-sm"></i>
-                                            </Link>
-                                        )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
 
-                        {/* Controles de Navegação (Bolinhas) */}
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-3">
-                            {SOLUCOES.map((_, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => setSlideAtual(index)}
-                                    className={`h-2.5 rounded-full transition-all duration-300 ${slideAtual === index ? "w-8 bg-blue-600 dark:bg-blue-500" : "w-2.5 bg-slate-300 dark:bg-slate-700"}`}
-                                    aria-label={`Ir para slide ${index + 1}`}
-                                />
+                                    {/* Fundo de Imagem Dark/Grayscale */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/90 to-transparent z-0 pointer-events-none"></div>
+                                    <img
+                                        src={prod.img}
+                                        alt={prod.title}
+                                        className="absolute right-0 top-0 w-3/4 h-full object-cover filter grayscale opacity-10 group-hover:opacity-30 group-hover:grayscale-0 transform group-hover:scale-105 transition-all duration-700 mask-image-gradient pointer-events-none"
+                                        style={{
+                                            WebkitMaskImage:
+                                                "linear-gradient(to right, transparent, black)",
+                                        }}
+                                    />
+                                </Reveal>
                             ))}
                         </div>
+                    </div>
+                </section>
+
+                {/* SHOWCASE DE TECNOLOGIA */}
+                <section
+                    id="tecnologia"
+                    className="py-24 px-6 bg-black relative"
+                >
+                    <div className="max-w-7xl mx-auto">
+                        <Reveal className="mb-16">
+                            <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight text-white">
+                                Tecnologia de Base.
+                            </h2>
+                            <p className="text-lg text-gray-400 max-w-2xl font-light">
+                                Não reinventamos a roda, construímos a estrada.
+                                Nossos sistemas rodam em infraestrutura
+                                Cloud-Native, garantindo 99.9% de uptime para a
+                                sua operação.
+                            </p>
+                        </Reveal>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <Reveal className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-10 relative overflow-hidden group">
+                                <div className="relative z-10">
+                                    <i className="fa-solid fa-server text-3xl text-blue-500 mb-6"></i>
+                                    <h3 className="text-xl font-bold text-white mb-2">
+                                        Cloud Real-Time
+                                    </h3>
+                                    <p className="text-gray-400 text-sm">
+                                        Atualização de KDS e Painéis de forma
+                                        instantânea através do Google Firebase e
+                                        React.
+                                    </p>
+                                </div>
+                            </Reveal>
+
+                            <Reveal
+                                delay={150}
+                                className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-10 relative overflow-hidden group"
+                            >
+                                <div className="relative z-10">
+                                    <i className="fa-solid fa-file-invoice text-3xl text-emerald-500 mb-6"></i>
+                                    <h3 className="text-xl font-bold text-white mb-2">
+                                        Motor Fiscal Nativo
+                                    </h3>
+                                    <p className="text-gray-400 text-sm">
+                                        Módulo de faturamento próprio. Emissão
+                                        de NFC-e e NF-e comunicando direto com a
+                                        SEFAZ.
+                                    </p>
+                                </div>
+                            </Reveal>
+
+                            <Reveal
+                                delay={300}
+                                className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-10 relative overflow-hidden group"
+                            >
+                                <div className="relative z-10">
+                                    <i className="fa-solid fa-brain text-3xl text-purple-500 mb-6"></i>
+                                    <h3 className="text-xl font-bold text-white mb-2">
+                                        API First & IA
+                                    </h3>
+                                    <p className="text-gray-400 text-sm">
+                                        Integrações prontas para APIs de
+                                        pagamento, WhatsApp e motores de LLM
+                                        para análise de dados.
+                                    </p>
+                                </div>
+                            </Reveal>
+                        </div>
+                    </div>
+                </section>
+
+                {/* CTA */}
+                <section
+                    id="contact"
+                    className="py-32 px-6 text-center relative overflow-hidden bg-black"
+                >
+                    <Reveal className="max-w-3xl mx-auto relative z-10">
+                        <h2 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight text-white">
+                            Pronto para subir de nível?
+                        </h2>
+                        <p className="text-lg text-gray-400 mb-10 font-light max-w-xl mx-auto">
+                            Chega de processos manuais. Agende uma consultoria
+                            gratuita e descubra qual módulo OdevTech encaixa no
+                            seu negócio.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                            <a
+                                href="https://wa.me/5547999545703"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-blue-600 text-white px-8 py-3.5 rounded-full text-sm font-medium hover:bg-blue-700 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+                            >
+                                Falar com Especialista
+                            </a>
+                        </div>
+                    </Reveal>
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+                </section>
+            </main>
+
+            {/* FOOTER */}
+            <footer className="bg-[#050505] pt-16 pb-8 px-6 text-sm border-t border-white/5">
+                <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 mb-12">
+                    <div className="col-span-2 lg:col-span-2 pr-8">
+                        <div className="mb-4">
+                            <Logo />
+                        </div>
+                        <p className="text-gray-500 mb-6 max-w-xs text-xs leading-relaxed">
+                            Ecossistema de Gestão SaaS. Desenvolvido para
+                            operações de alta performance, sem floreios.
+                        </p>
+                        <div className="flex space-x-4">
+                            <a
+                                href="https://www.linkedin.com/in/odeclei-francisco-tamanini-98b514aa/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/30 transition-all"
+                            >
+                                <i className="fa-brands fa-linkedin-in"></i>
+                            </a>
+                            <a
+                                href="https://www.instagram.com/odevtech/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/30 transition-all"
+                            >
+                                <i className="fa-brands fa-instagram"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold text-white mb-4">
+                            Módulos
+                        </h4>
+                        <ul className="space-y-3 text-gray-500 text-xs">
+                            <li>
+                                <a
+                                    href="#produtos"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    OdevBar
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="#produtos"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    OdevConf
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="#produtos"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    OdevLog
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="#produtos"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    OdevDesk
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold text-white mb-4">
+                            Empresa
+                        </h4>
+                        <ul className="space-y-3 text-gray-500 text-xs">
+                            <li>
+                                <a
+                                    href="#"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    Sobre Nós
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="/login"
+                                    className="hover:text-white transition-colors"
+                                >
+                                    Portal do Cliente
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold text-white mb-4">
+                            Contato
+                        </h4>
+                        <ul className="space-y-3 text-gray-500 text-xs">
+                            <li>
+                                <a
+                                    href="https://wa.me/5547999545703"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    (+55) 47 9 9995-45703
+                                </a>
+                            </li>
+                            <li>Santa Catarina, Brasil</li>
+                        </ul>
                     </div>
                 </div>
-            </section>
-
-            {/* */}
-            <footer className="bg-slate-900 text-slate-300 py-12 border-t border-slate-800">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex items-center gap-2">
-                        <i className="fas fa-layer-group text-blue-500 text-xl"></i>
-                        <span className="text-xl font-bold text-white">
-                            OdevTech
-                        </span>
-                    </div>
-                    <p className="text-sm text-slate-400">
-                        © 2026 OdevTech Sistemas. Todos os direitos reservados.
+                <div className="max-w-7xl mx-auto border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center text-gray-600 text-xs">
+                    <p>
+                        &copy; {new Date().getFullYear()} OdevTech. Todos os
+                        direitos reservados.
                     </p>
-                    <div className="flex gap-4">
-                        <a
-                            href="#"
-                            className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
-                        >
-                            <i className="fab fa-linkedin-in"></i>
-                        </a>
-                        <a
-                            href="https://wa.me/5547999545703"
-                            className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors"
-                        >
-                            <i className="fab fa-whatsapp"></i>
-                        </a>
-                    </div>
                 </div>
             </footer>
         </div>

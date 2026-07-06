@@ -272,7 +272,7 @@ export default function AbaGarcom({ nomeDaLoja }) {
                     Voltar
                 </button>
             </div>
-            <div className="flex gap-2 overflow-x-auto p-4 bg-white border-b no-scrollbar shadow-sm">
+            <div className="flex gap-2 overflow-x-auto p-4 bg-white border-b overflow-y-auto shadow-sm">
                 {[
                     ...new Set(produtosMenu.map((p) => p.categoria || "Geral")),
                 ].map((cat) => (

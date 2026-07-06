@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Home,
@@ -16,21 +23,33 @@ import {
   Lock,
   BellRing,
   Printer,
+  Loader2,
 } from "lucide-react";
-import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  limit,
+} from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { db, auth } from "../firebase";
 
-import AbaDashboard from "../components/admin/AbaDashboard";
-import AbaCardapio from "../components/admin/AbaCardapio";
-import AbaKanban from "../components/admin/AbaKanban";
-import AbaCaixaBar from "../components/admin/AbaCaixaBar";
-import AbaGarcom from "../components/admin/AbaGarcom";
-import AbaClientes from "../components/admin/AbaClientes";
-import AbaConfiguracoes from "../components/admin/AbaConfig";
-import AbaHistorico from "../components/admin/AbaHistorico";
-import AbaFinanceiro from "../components/admin/AbaFinanceiro";
-import AbaEstoque from "../components/admin/AbaEstoque";
+// ==========================================
+// 1. LAZY LOADING DAS ABAS (PERFORMANCE)
+// Só carrega o código da aba quando o utilizador clica nela
+// ==========================================
+const AbaDashboard = lazy(() => import("../components/admin/AbaDashboard"));
+const AbaCardapio = lazy(() => import("../components/admin/AbaCardapio"));
+const AbaKanban = lazy(() => import("../components/admin/AbaKanban"));
+const AbaCaixaBar = lazy(() => import("../components/admin/AbaCaixaBar"));
+const AbaGarcom = lazy(() => import("../components/admin/AbaGarcom"));
+const AbaClientes = lazy(() => import("../components/admin/AbaClientes"));
+const AbaConfiguracoes = lazy(() => import("../components/admin/AbaConfig"));
+const AbaHistorico = lazy(() => import("../components/admin/AbaHistorico"));
+const AbaFinanceiro = lazy(() => import("../components/admin/AbaFinanceiro"));
+const AbaEstoque = lazy(() => import("../components/admin/AbaEstoque"));
 
 const paletaTemasAdmin = {
   pink: { bgAtivo: "bg-pink-100", textoAtivo: "text-pink-700" },
@@ -67,10 +86,66 @@ export default function PainelAdmin() {
   const [notificacoes, setNotificacoes] = useState([]);
   const historicoItensMesa = useRef({});
 
-  // FUNÇÃO DE IMPRESSÃO DO TOAST
-  const imprimirTicketRapido = (dados) => {
-    const janelaImpressao = window.open("", "", "width=300,height=600");
-    let htmlCupom = `
+  // ==========================================
+  // 2. MEMOIZAÇÃO DE FUNÇÕES (Evita re-renders)
+  // ==========================================
+  const formatarDinheiro = useCallback(
+    (v) =>
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(v || 0),
+    [],
+  );
+
+  const formatarItensPedido = useCallback(
+    (itens) =>
+      !itens || itens.length === 0
+        ? "Nenhum item"
+        : itens
+            .map((i) => `${i.quantidade || i.qtd_total}x ${i.nome}`)
+            .join(", "),
+    [],
+  );
+
+  const getDiasDaSemana = useCallback(() => {
+    const hoje = new Date();
+    const domingo = new Date(
+      hoje.getFullYear(),
+      hoje.getMonth(),
+      hoje.getDate() - hoje.getDay(),
+    );
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(domingo);
+      d.setDate(domingo.getDate() + i);
+      return {
+        nome: ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][i],
+        numero: d.getDate(),
+        dataBusca: getDateStr(d),
+      };
+    });
+  }, []);
+
+  const isHoje = useCallback((dataIso) => {
+    if (!dataIso) return false;
+    return getDateStr(new Date(dataIso)) === getDateStr(new Date());
+  }, []);
+
+  const formatarDataEHora = useCallback((dataIso) => {
+    if (!dataIso) return "Sem data";
+    const d = new Date(dataIso);
+    return `${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  }, []);
+
+  const navegarPara = useCallback((aba) => {
+    setAbaAtiva(aba);
+    setMenuMobileAberto(false);
+  }, []);
+
+  const imprimirTicketRapido = useCallback(
+    (dados) => {
+      const janelaImpressao = window.open("", "", "width=300,height=600");
+      let htmlCupom = `
             <html><head><title>Ticket</title>
             <style>
                 body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0; padding: 5mm; color: #000; font-size: 14px; }
@@ -82,31 +157,32 @@ export default function PainelAdmin() {
             <div style="font-size: 16px; margin-bottom: 10px;"><b>Cliente:</b> ${dados.cliente}</div>
         `;
 
-    if (dados.endereco)
-      htmlCupom += `<div style="margin-bottom: 10px;"><b>Endereço:</b> ${dados.endereco}</div>`;
-    if (dados.telefone)
-      htmlCupom += `<div style="margin-bottom: 10px;"><b>WhatsApp:</b> ${dados.telefone}</div>`;
+      if (dados.endereco)
+        htmlCupom += `<div style="margin-bottom: 10px;"><b>Endereço:</b> ${dados.endereco}</div>`;
+      if (dados.telefone)
+        htmlCupom += `<div style="margin-bottom: 10px;"><b>WhatsApp:</b> ${dados.telefone}</div>`;
 
-    htmlCupom += `<hr/><div class="bold">ITENS DO PEDIDO:</div><div style="margin-top: 5px;">`;
-    (dados.itens || []).forEach((item) => {
-      htmlCupom += `<div style="margin-bottom: 4px;">${item.quantidade || item.qtd_total}x ${item.nome}</div>`;
-    });
-    htmlCupom += `</div><hr/><div class="center" style="margin-top: 15px;">Emitido em: ${new Date().toLocaleString("pt-BR")}</div></body></html>`;
+      htmlCupom += `<hr/><div class="bold">ITENS DO PEDIDO:</div><div style="margin-top: 5px;">`;
+      (dados.itens || []).forEach((item) => {
+        htmlCupom += `<div style="margin-bottom: 4px;">${item.quantidade || item.qtd_total}x ${item.nome}</div>`;
+      });
+      htmlCupom += `</div><hr/><div class="center" style="margin-top: 15px;">Emitido em: ${new Date().toLocaleString("pt-BR")}</div></body></html>`;
 
-    janelaImpressao.document.write(htmlCupom);
-    janelaImpressao.document.close();
-    janelaImpressao.focus();
-    setTimeout(() => {
-      janelaImpressao.print();
-      janelaImpressao.close();
-    }, 500);
-  };
+      janelaImpressao.document.write(htmlCupom);
+      janelaImpressao.document.close();
+      janelaImpressao.focus();
+      setTimeout(() => {
+        janelaImpressao.print();
+        janelaImpressao.close();
+      }, 500);
+    },
+    [configLoja, nomeDaLoja],
+  );
 
-  const dispararAlerta = (titulo, texto, dadosAlvo = null) => {
+  const dispararAlerta = useCallback((titulo, texto, dadosAlvo = null) => {
     const id = Date.now();
     setNotificacoes((prev) => [...prev, { id, titulo, texto, dadosAlvo }]);
     try {
-      // LINK CORRIGIDO PARA O TOQUE DA CAMPAINHA
       const audio = new Audio(
         "https://cdn.pixabay.com/audio/2022/03/15/audio_24e057ba3b.mp3",
       );
@@ -120,7 +196,7 @@ export default function PainelAdmin() {
       () => setNotificacoes((prev) => prev.filter((n) => n.id !== id)),
       10000,
     );
-  };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "lojas", nomeDaLoja), (docSnap) => {
@@ -144,42 +220,47 @@ export default function PainelAdmin() {
 
   useEffect(() => {
     let isInitialPedidos = true;
-    const unPedidos = onSnapshot(
-      query(collection(db, "pedidos"), where("loja", "==", nomeDaLoja)),
-      (snap) => {
-        setPedidos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        if (!isInitialPedidos) {
-          snap.docChanges().forEach((change) => {
-            if (change.type === "added") {
-              const data = change.doc.data();
-              const valorFormatado = new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(data.valorTotal || 0);
-              if (data.origem === "mesa" || data.origem === "garcom") {
-                dispararAlerta(
-                  "🛎️ Pedido para a Cozinha!",
-                  `${data.cliente} adicionou itens via Autoatendimento ou Garçom.`,
-                  data,
-                );
-              } else {
-                dispararAlerta(
-                  "🛵 Novo Pedido Delivery!",
-                  `O cliente ${data.cliente} enviou um pedido de ${valorFormatado}.`,
-                  data,
-                );
-              }
-            }
-          });
-        }
-        isInitialPedidos = false;
-      },
+
+    // ==========================================
+    // 3. LIMITE DE CONSULTA DE PEDIDOS (Evita travamentos)
+    // ==========================================
+    const qPedidos = query(
+      collection(db, "pedidos"),
+      where("loja", "==", nomeDaLoja),
+      limit(1000), // Impede que o sistema colapse com bases de dados gigantes
     );
+
+    const unPedidos = onSnapshot(qPedidos, (snap) => {
+      setPedidos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      if (!isInitialPedidos) {
+        snap.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            const valorFormatado = formatarDinheiro(data.valorTotal);
+            if (data.origem === "mesa" || data.origem === "garcom") {
+              dispararAlerta(
+                "🛎️ Pedido para a Cozinha!",
+                `${data.cliente} adicionou itens via Autoatendimento ou Garçom.`,
+                data,
+              );
+            } else {
+              dispararAlerta(
+                "🛵 Novo Pedido Delivery!",
+                `O cliente ${data.cliente} enviou um pedido de ${valorFormatado}.`,
+                data,
+              );
+            }
+          }
+        });
+      }
+      isInitialPedidos = false;
+    });
 
     const unProdutos = onSnapshot(
       query(collection(db, "produtos"), where("loja", "==", nomeDaLoja)),
       (snap) => setProdutos(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     );
+
     const unClientes = onSnapshot(
       query(collection(db, "clientes"), where("loja", "==", nomeDaLoja)),
       (snap) => setClientes(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -188,10 +269,7 @@ export default function PainelAdmin() {
     const unEquipe = onSnapshot(
       query(collection(db, "equipe"), where("loja", "==", nomeDaLoja)),
       (snap) => {
-        const equipe = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
+        const equipe = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setMembrosEquipe(equipe);
         const emailLogado = auth.currentUser?.email;
         const usuarioLogado = equipe.find((m) => m.email === emailLogado);
@@ -208,51 +286,8 @@ export default function PainelAdmin() {
       unClientes();
       unEquipe();
     };
-  }, [nomeDaLoja]);
+  }, [nomeDaLoja, formatarDinheiro, dispararAlerta]);
 
-  const formatarDinheiro = (v) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(v || 0);
-  const formatarItensPedido = (itens) =>
-    !itens || itens.length === 0
-      ? "Nenhum item"
-      : itens.map((i) => `${i.quantidade}x ${i.nome}`).join(", ");
-
-  const getDiasDaSemana = () => {
-    const hoje = new Date();
-    const domingo = new Date(
-      hoje.getFullYear(),
-      hoje.getMonth(),
-      hoje.getDate() - hoje.getDay(),
-    );
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date(domingo);
-      d.setDate(domingo.getDate() + i);
-      return {
-        nome: ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][i],
-        numero: d.getDate(),
-        dataBusca: getDateStr(d),
-      };
-    });
-  };
-
-  const isHoje = (dataIso) => {
-    if (!dataIso) return false;
-    return getDateStr(new Date(dataIso)) === getDateStr(new Date());
-  };
-
-  const formatarDataEHora = (dataIso) => {
-    if (!dataIso) return "Sem data";
-    const d = new Date(dataIso);
-    return `${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
-  };
-
-  const navegarPara = (aba) => {
-    setAbaAtiva(aba);
-    setMenuMobileAberto(false);
-  };
   const temaAtual = paletaTemasAdmin[configLoja?.tema] || paletaTemasAdmin.pink;
 
   const renderizarMenu = () => {
@@ -312,11 +347,7 @@ export default function PainelAdmin() {
           label: "Controle de Estoque",
         });
       itensComuns.push(
-        {
-          id: "clientes",
-          icon: <Users size={20} />,
-          label: "Clientes",
-        },
+        { id: "clientes", icon: <Users size={20} />, label: "Clientes" },
         {
           id: "historico",
           icon: <ListOrdered size={20} />,
@@ -343,7 +374,7 @@ export default function PainelAdmin() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">
-      {/* NOTIFICAÇÕES GLOBAIS COM BOTÃO DE IMPRIMIR */}
+      {/* NOTIFICAÇÕES */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
         {notificacoes.map((n) => (
           <div
@@ -461,7 +492,7 @@ export default function PainelAdmin() {
         </div>
       </aside>
 
-      <main className="flex-1 h-screen overflow-y-auto relative">
+      <main className="flex-1 h-screen overflow-y-auto relative flex flex-col">
         <header className="lg:hidden bg-white border-b border-slate-200 p-4 sticky top-0 z-30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {cargoUsuario !== "garcom" && (
@@ -490,7 +521,7 @@ export default function PainelAdmin() {
         </header>
 
         <div
-          className={`p-6 max-w-7xl mx-auto ${cargoUsuario === "garcom" ? "lg:p-6" : "lg:p-12"}`}
+          className={`p-6 max-w-7xl mx-auto w-full ${cargoUsuario === "garcom" ? "lg:p-6" : "lg:p-12"} flex-1`}
         >
           {abaAtiva !== "garcom" && (
             <div className="mb-10">
@@ -507,53 +538,64 @@ export default function PainelAdmin() {
               </h1>
             </div>
           )}
-          {abaAtiva === "dashboard" && (
-            <AbaDashboard
-              nomeDaLoja={nomeDaLoja}
-              pedidos={pedidos}
-              clientes={clientes}
-              formatarDinheiro={formatarDinheiro}
-              formatarDataEHora={formatarDataEHora}
-              formatarItensPedido={formatarItensPedido}
-              isHoje={isHoje}
-              getDiasDaSemana={getDiasDaSemana}
-            />
-          )}
-          {abaAtiva === "kanban" && <AbaKanban nomeDaLoja={nomeDaLoja} />}
-          {abaAtiva === "caixa" && <AbaCaixaBar nomeDaLoja={nomeDaLoja} />}
-          {abaAtiva === "garcom" && <AbaGarcom nomeDaLoja={nomeDaLoja} />}
-          {abaAtiva === "cardapio" && (
-            <AbaCardapio
-              nomeDaLoja={nomeDaLoja}
-              produtos={produtos}
-              formatarDinheiro={formatarDinheiro}
-            />
-          )}
-          {abaAtiva === "estoque" && <AbaEstoque nomeDaLoja={nomeDaLoja} />}
-          {abaAtiva === "clientes" && (
-            <AbaClientes nomeDaLoja={nomeDaLoja} clientes={clientes} />
-          )}
-          {abaAtiva === "historico" && (
-            <AbaHistorico
-              pedidos={pedidos}
-              formatarDinheiro={formatarDinheiro}
-            />
-          )}
-          {abaAtiva === "financeiro" && (
-            <AbaFinanceiro
-              nomeDaLoja={nomeDaLoja}
-              pedidos={pedidos}
-              formatarDinheiro={formatarDinheiro}
-            />
-          )}
-          {abaAtiva === "configuracoes" && (
-            <AbaConfiguracoes
-              nomeDaLoja={nomeDaLoja}
-              configLoja={configLoja}
-              setConfigLoja={setConfigLoja}
-              membrosEquipe={membrosEquipe}
-            />
-          )}
+
+          {/* O SUSPENSE MOSTRA UM LOADING ENQUANTO O CÓDIGO DA ABA É DESCARREGADO */}
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                <Loader2 className="animate-spin mb-4" size={32} />
+                <p>A carregar módulo...</p>
+              </div>
+            }
+          >
+            {abaAtiva === "dashboard" && (
+              <AbaDashboard
+                nomeDaLoja={nomeDaLoja}
+                pedidos={pedidos}
+                clientes={clientes}
+                formatarDinheiro={formatarDinheiro}
+                formatarDataEHora={formatarDataEHora}
+                formatarItensPedido={formatarItensPedido}
+                isHoje={isHoje}
+                getDiasDaSemana={getDiasDaSemana}
+              />
+            )}
+            {abaAtiva === "kanban" && <AbaKanban nomeDaLoja={nomeDaLoja} />}
+            {abaAtiva === "caixa" && <AbaCaixaBar nomeDaLoja={nomeDaLoja} />}
+            {abaAtiva === "garcom" && <AbaGarcom nomeDaLoja={nomeDaLoja} />}
+            {abaAtiva === "cardapio" && (
+              <AbaCardapio
+                nomeDaLoja={nomeDaLoja}
+                produtos={produtos}
+                formatarDinheiro={formatarDinheiro}
+              />
+            )}
+            {abaAtiva === "estoque" && <AbaEstoque nomeDaLoja={nomeDaLoja} />}
+            {abaAtiva === "clientes" && (
+              <AbaClientes nomeDaLoja={nomeDaLoja} clientes={clientes} />
+            )}
+            {abaAtiva === "historico" && (
+              <AbaHistorico
+                pedidos={pedidos}
+                formatarDinheiro={formatarDinheiro}
+              />
+            )}
+            {abaAtiva === "financeiro" && (
+              <AbaFinanceiro
+                nomeDaLoja={nomeDaLoja}
+                pedidos={pedidos}
+                formatarDinheiro={formatarDinheiro}
+              />
+            )}
+            {abaAtiva === "configuracoes" && (
+              <AbaConfiguracoes
+                nomeDaLoja={nomeDaLoja}
+                configLoja={configLoja}
+                setConfigLoja={setConfigLoja}
+                membrosEquipe={membrosEquipe}
+              />
+            )}
+          </Suspense>
         </div>
       </main>
     </div>
