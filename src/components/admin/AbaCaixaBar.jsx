@@ -9,7 +9,6 @@ import {
     Minus,
     Users,
     Clock,
-    UserCircle,
     Coffee,
     Send,
     X,
@@ -26,6 +25,8 @@ import {
     doc,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import { focusNFeService } from "../../services/focusNFeService";
+import { gerarPayloadNFCe } from "../../utils/fiscalUtils";
 
 export default function AbaCaixaBar({ nomeDaLoja }) {
     const [busca, setBusca] = useState("");
@@ -55,41 +56,13 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
         email: "",
     });
     const [emitindoNf, setEmitindoNf] = useState(false);
-
-    const abrirModalEmissaoBar = (comanda) => {
-        setComandaNfAlvo(comanda);
-        setFormNf({
-            tipoNota: "NFCe",
-            cpf: "",
-            nome: comanda.cliente || "",
-            email: "",
-        });
-        setModalNfOpen(true);
-    };
-
-    const confirmarEmissaoNfBar = async (e) => {
-        e.preventDefault();
-        setEmitindoNf(true);
-        try {
-            await updateDoc(doc(db, "comandas", comandaNfAlvo.id), {
-                nfEmitida: true,
-                dadosFiscais: formNf,
-            });
-            alert(`✅ ${formNf.tipoNota} processada com sucesso!`);
-            setModalNfOpen(false);
-        } catch (error) {
-            alert("Erro ao emitir nota.");
-        } finally {
-            setEmitindoNf(false);
-        }
-    };
+    const [configLoja, setConfigLoja] = useState(null);
 
     const [comandaParaAdicionar, setComandaParaAdicionar] = useState(null);
     const [formNovoItem, setFormNovoItem] = useState({
         produtoId: "",
         quantidade: 1,
     });
-    const [configLoja, setConfigLoja] = useState(null);
 
     useEffect(() => {
         if (!nomeDaLoja) return;
@@ -122,6 +95,61 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
             unProdutos();
         };
     }, [nomeDaLoja]);
+
+    // ================== EMISSÃO REAL ==================
+    const abrirModalEmissaoBar = (comanda) => {
+        setComandaNfAlvo(comanda);
+        setFormNf({
+            tipoNota: "NFCe",
+            cpf: "",
+            nome: comanda.cliente || "",
+            email: "",
+        });
+        setModalNfOpen(true);
+    };
+
+    const confirmarEmissaoNfBar = async (e) => {
+        e.preventDefault();
+        if (!comandaNfAlvo) return;
+
+        setEmitindoNf(true);
+
+        try {
+            const payload = gerarPayloadNFCe(
+                comandaNfAlvo,
+                configLoja,
+                formNf.cpf,
+            );
+
+            const resultado = await focusNFeService.emitirNFCe(
+                nomeDaLoja,
+                payload,
+            );
+
+            // Salva dados da nota no Firebase
+            await updateDoc(doc(db, "comandas", comandaNfAlvo.id), {
+                nfEmitida: true,
+                numeroNota: resultado.numero,
+                chaveAcesso: resultado.chave_acesso,
+                dadosFiscais: resultado,
+                urlDanfe: resultado.url_danfe,
+            });
+
+            alert(`✅ NFC-e ${resultado.numero} emitida com sucesso!`);
+
+            // Opcional: abrir DANFE em nova aba
+            if (resultado.url_danfe) {
+                window.open(resultado.url_danfe, "_blank");
+            }
+
+            setModalNfOpen(false);
+        } catch (error) {
+            console.error(error);
+            alert("Erro na emissão: " + (error.message || "Tente novamente"));
+        } finally {
+            setEmitindoNf(false);
+        }
+    };
 
     const criarNovaComanda = async (e) => {
         e.preventDefault();
@@ -896,7 +924,7 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
 
                             <div>
                                 <label className="block text-xs font-black text-slate-400 uppercase mb-1">
-                                    NIF / CNPJ{" "}
+                                    CPF / CNPJ{" "}
                                     {formNf.tipoNota === "NFe" && (
                                         <span className="text-red-500">*</span>
                                     )}

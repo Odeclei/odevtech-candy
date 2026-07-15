@@ -25,6 +25,7 @@ import {
     Save,
     Blocks,
     CheckSquare,
+    Receipt,
 } from "lucide-react";
 
 // ==========================================
@@ -59,9 +60,15 @@ const MODULOS_DISPONIVEIS = [
     },
     {
         id: "fiscal",
-        label: "Emissão Fiscal (NFC-e)",
+        label: "Emissão Fiscal (NFC-e/NF-e)",
         preco: 120.0,
         cor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    },
+    {
+        id: "importacao_xml",
+        label: "Importação de XML (Notas contra CNPJ)",
+        preco: 42.0,
+        cor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
     },
 ];
 
@@ -86,7 +93,11 @@ export default function SuperAdmin() {
         mensalidade: "",
         pagamentoEmDia: true,
         ativo: true,
-        modulos: [], // NOVO: Módulos Premium
+        modulos: [],
+        // Focus NFe Tokens
+        focusTokenProducao: "",
+        focusTokenHomologacao: "",
+        focusAmbiente: "homologacao", // homologacao | producao
     });
     const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
@@ -112,10 +123,14 @@ export default function SuperAdmin() {
                 tema: novoNicho === "bar_restaurante" ? "amber" : "pink",
                 ativo: true,
                 pagamentoEmDia: true,
-                mensalidade: PRECO_BASE, // Nasce com o plano base
-                modulos: [], // Nasce sem módulos extra
+                mensalidade: PRECO_BASE,
+                modulos: [],
                 whatsapp: "",
                 criadoEm: new Date().toISOString(),
+                // Padrões vazios para NFe
+                focusAmbiente: "homologacao",
+                focusTokenProducao: "",
+                focusTokenHomologacao: "",
             });
 
             setNovaLojaId("");
@@ -152,18 +167,19 @@ export default function SuperAdmin() {
             pagamentoEmDia: loja.pagamentoEmDia !== false,
             ativo: loja.ativo !== false,
             modulos: loja.modulos || [],
+            focusTokenProducao: loja.focusTokenProducao || "",
+            focusTokenHomologacao: loja.focusTokenHomologacao || "",
+            focusAmbiente: loja.focusAmbiente || "homologacao",
         });
         setIsModalOpen(true);
     };
 
-    // Ativa/Desativa Módulos e Calcula o Novo Preço Sugerido
     const toggleModulo = (modId) => {
         setFormData((prev) => {
             const modulosAtualizados = prev.modulos.includes(modId)
-                ? prev.modulos.filter((m) => m !== modId) // Remove
-                : [...prev.modulos, modId]; // Adiciona
+                ? prev.modulos.filter((m) => m !== modId)
+                : [...prev.modulos, modId];
 
-            // Calcula o MRR baseando-se nos módulos ativos
             const novoPreco =
                 PRECO_BASE +
                 modulosAtualizados.reduce((acc, mId) => {
@@ -174,7 +190,7 @@ export default function SuperAdmin() {
             return {
                 ...prev,
                 modulos: modulosAtualizados,
-                mensalidade: novoPreco.toFixed(2), // Atualiza o input de preço automaticamente
+                mensalidade: novoPreco.toFixed(2),
             };
         });
     };
@@ -192,6 +208,10 @@ export default function SuperAdmin() {
                 pagamentoEmDia: formData.pagamentoEmDia,
                 ativo: formData.ativo,
                 modulos: formData.modulos,
+                // Tokens Focus NFe salvos
+                focusTokenProducao: formData.focusTokenProducao,
+                focusTokenHomologacao: formData.focusTokenHomologacao,
+                focusAmbiente: formData.focusAmbiente,
                 atualizadoEm: new Date().toISOString(),
             });
             setIsModalOpen(false);
@@ -210,8 +230,6 @@ export default function SuperAdmin() {
             style: "currency",
             currency: "BRL",
         }).format(v || 0);
-    const formatarData = (iso) =>
-        iso ? new Date(iso).toLocaleDateString("pt-BR") : "--";
 
     const enviarWhatsApp = (phone) => {
         if (!phone) return alert("Cliente sem número de WhatsApp registado.");
@@ -680,7 +698,7 @@ export default function SuperAdmin() {
             {/* ==================================================================== */}
             {isModalOpen && lojaEditando && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-slate-800 rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-slate-800 rounded-3xl w-full max-w-5xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
                             <div>
                                 <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -704,7 +722,7 @@ export default function SuperAdmin() {
                             className="flex-1 overflow-y-auto"
                         >
                             <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                {/* LADO ESQUERDO: Dados Base */}
+                                {/* LADO ESQUERDO: Dados Base & Fiscais */}
                                 <div className="space-y-6">
                                     <h3 className="text-sm font-bold text-white border-b border-slate-700 pb-2">
                                         Informações Base
@@ -797,6 +815,95 @@ export default function SuperAdmin() {
                                             </div>
                                         </label>
                                     </div>
+
+                                    {/* SESSÃO FISCAL (SUPER ADMIN) - SÓ MOSTRA SE O MÓDULO FISCAL ESTIVER ATIVO */}
+                                    {formData.modulos.includes("fiscal") && (
+                                        <div className="pt-6 mt-6 border-t border-slate-700 animate-in fade-in">
+                                            <h3 className="text-sm font-bold text-blue-400 pb-2 flex items-center gap-2">
+                                                <Receipt size={16} /> Integração
+                                                Focus NFe (API)
+                                            </h3>
+                                            <p className="text-[10px] text-slate-400 mb-4">
+                                                Insira os tokens oficiais
+                                                gerados no painel do
+                                                desenvolvedor da Focus NFe para
+                                                esta empresa.
+                                            </p>
+
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
+                                                        Ambiente de Operação
+                                                    </label>
+                                                    <select
+                                                        value={
+                                                            formData.focusAmbiente
+                                                        }
+                                                        onChange={(e) =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                focusAmbiente:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-white text-sm"
+                                                    >
+                                                        <option value="homologacao">
+                                                            Homologação
+                                                            (Ambiente de Testes)
+                                                        </option>
+                                                        <option value="producao">
+                                                            Produção (Notas com
+                                                            Validade Jurídica)
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-amber-400 mb-1.5 uppercase">
+                                                        Token Homologação
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={
+                                                            formData.focusTokenHomologacao
+                                                        }
+                                                        onChange={(e) =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                focusTokenHomologacao:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                        placeholder="Token do ambiente de testes da Focus"
+                                                        className="w-full bg-slate-900 border border-amber-700/50 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 outline-none text-white text-sm"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-emerald-400 mb-1.5 uppercase">
+                                                        Token Produção
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={
+                                                            formData.focusTokenProducao
+                                                        }
+                                                        onChange={(e) =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                focusTokenProducao:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                        placeholder="Token Oficial da SEFAZ (Validade Jurídica)"
+                                                        className="w-full bg-slate-900 border border-emerald-700/50 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none text-white text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* LADO DIREITO: Upsell e Financeiro */}
@@ -915,7 +1022,7 @@ export default function SuperAdmin() {
                                     <Save size={18} />{" "}
                                     {salvandoEdicao
                                         ? "Salvando..."
-                                        : "Salvar Alterações e Mensalidade"}
+                                        : "Salvar Alterações"}
                                 </button>
                             </div>
                         </form>

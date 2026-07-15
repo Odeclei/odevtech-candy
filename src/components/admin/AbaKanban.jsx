@@ -17,7 +17,10 @@ import {
     X,
     Receipt,
     Send,
+    Printer,
 } from "lucide-react";
+import { focusNFeService } from "../../services/focusNFeService";
+import { gerarPayloadNFCe } from "../../utils/fiscalUtils";
 
 export default function AbaKanban({ nomeDaLoja }) {
     const [configLoja, setConfigLoja] = useState(null);
@@ -34,7 +37,7 @@ export default function AbaKanban({ nomeDaLoja }) {
     const [modalNfOpen, setModalNfOpen] = useState(false);
     const [pedidoNfAlvo, setPedidoNfAlvo] = useState(null);
     const [formNf, setFormNf] = useState({
-        tipoNota: "NFCe", // NFCe (Rápida) ou NFe (Completa)
+        tipoNota: "NFCe",
         cpf: "",
         nome: "",
         email: "",
@@ -99,7 +102,7 @@ export default function AbaKanban({ nomeDaLoja }) {
             setModalReceitaOpen(true);
         } else {
             alert(
-                `Nenhuma receita registada para "${nomeProdutoPedido}". Vá a Estoque > Fichas Técnicas para criar uma.`,
+                `Nenhuma receita registada para "${nomeProdutoPedido}". Vá a Estoque > Fichas Técnicas.`,
             );
         }
     };
@@ -113,6 +116,7 @@ export default function AbaKanban({ nomeDaLoja }) {
         }
     };
 
+    // ================== EMISSÃO REAL (Delivery) ==================
     const abrirModalEmissao = (pedido) => {
         setPedidoNfAlvo(pedido);
         setFormNf({
@@ -126,35 +130,75 @@ export default function AbaKanban({ nomeDaLoja }) {
 
     const confirmarEmissaoNf = async (e) => {
         e.preventDefault();
+        if (!pedidoNfAlvo) return;
+
         setEmitindoNf(true);
 
         try {
-            // AQUI ENTRA A INTEGRAÇÃO COM A API FISCAL NO FUTURO
+            const payload = gerarPayloadNFCe(
+                pedidoNfAlvo,
+                configLoja,
+                formNf.cpf,
+            );
 
-            // Grava os dados fiscais no pedido para histórico e trava o botão
-            await updateDoc(doc(db, "pedidos", pedidoNfAlvo.id), {
-                nfEmitida: true,
-                dadosFiscais: formNf,
+            const resultado = await focusNFeService.emitirNFCe(
+                nomeDaLoja,
+                payload,
+            );
+
+            // CORREÇÃO: Usando a referência correta do documento e fallback para evitar o 'undefined'
+            const pedidoRef = doc(db, "pedidos", pedidoNfAlvo.id);
+            await updateDoc(pedidoRef, {
+                statusNFCe: resultado.dadosFocus.status || "processando",
+                numeroNota: resultado.dadosFocus.numero || null,
+                caminhoXml:
+                    resultado.dadosFocus.caminho_xml_nota_fiscal || null,
+                caminhoPdf: resultado.dadosFocus.caminho_danfe || null,
+                nfEmitida: true, // Adicionando a flag para travar o botão de emitir
             });
 
-            alert(`✅ ${formNf.tipoNota} processada com sucesso!`);
+            alert(
+                `✅ Documento Fiscal enviado para processamento com sucesso!`,
+            );
             setModalNfOpen(false);
+
+            // Opcional: Já abrir a aba de impressão imediatamente se o link vier na resposta
+            if (resultado.dadosFocus.caminho_danfe) {
+                window.open(
+                    `https://api.focusnfe.com.br${resultado.dadosFocus.caminho_danfe}`,
+                    "_blank",
+                );
+            }
         } catch (error) {
-            console.log(error);
-            alert("Erro na comunicação com o emissor fiscal.");
+            console.error(error);
+            alert("Erro na emissão: " + (error.message || "Tente novamente"));
         } finally {
             setEmitindoNf(false);
         }
+    };
+
+    const imprimirNFCe = (caminhoPdf) => {
+        if (!caminhoPdf) {
+            alert(
+                "O PDF da nota ainda não está disponível ou está em processamento pela SEFAZ.",
+            );
+            return;
+        }
+
+        // Verifica se a URL já é completa. A FocusNFe costuma retornar um caminho relativo (ex: /notas_fiscais/...)
+        const urlCompleta = caminhoPdf.startsWith("http")
+            ? caminhoPdf
+            : `https://api.focusnfe.com.br${caminhoPdf}`;
+
+        window.open(urlCompleta, "_blank");
     };
 
     const deveAparecerNaCozinhaHoje = (dataIsoString) => {
         if (!dataIsoString) return true;
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
-
         const dataPedido = new Date(dataIsoString);
         dataPedido.setHours(0, 0, 0, 0);
-
         return dataPedido <= hoje;
     };
 
@@ -240,26 +284,73 @@ export default function AbaKanban({ nomeDaLoja }) {
                                         return (
                                             <div
                                                 key={idx}
-                                                className="text-sm text-slate-700 flex justify-between items-start group"
+                                                className="flex flex-col group"
                                             >
-                                                <div className="flex gap-2">
-                                                    <span className="font-black text-slate-900 bg-slate-100 px-2 rounded h-fit">
-                                                        {qtd}x
-                                                    </span>
-                                                    <span className="font-medium leading-tight">
-                                                        {item.nome}
-                                                    </span>
+                                                <div className="text-sm text-slate-700 flex justify-between items-start">
+                                                    <div className="flex gap-2">
+                                                        <span className="font-black text-slate-900 bg-slate-100 px-2 rounded h-fit">
+                                                            {qtd}x
+                                                        </span>
+                                                        <span className="font-medium leading-tight mt-0.5">
+                                                            {item.nome}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() =>
+                                                            abrirReceita(
+                                                                item.nome,
+                                                            )
+                                                        }
+                                                        className="text-amber-600 bg-amber-50 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                        title="Ver Receita"
+                                                    >
+                                                        <ChefHat size={16} />
+                                                    </button>
                                                 </div>
 
-                                                <button
-                                                    onClick={() =>
-                                                        abrirReceita(item.nome)
-                                                    }
-                                                    className="text-amber-600 bg-amber-50 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                                    title="Ver Receita"
-                                                >
-                                                    <ChefHat size={16} />
-                                                </button>
+                                                {item.isKit &&
+                                                    item.subitensSelecionados
+                                                        ?.length > 0 && (
+                                                        <div className="ml-8 mt-1.5 border-l-2 border-slate-200 pl-3 space-y-1">
+                                                            {item.subitensSelecionados.map(
+                                                                (sub, sIdx) => (
+                                                                    <div
+                                                                        key={
+                                                                            sIdx
+                                                                        }
+                                                                        className="text-xs text-slate-500 font-medium flex items-center justify-between group/sub"
+                                                                    >
+                                                                        <span className="flex items-center gap-1.5">
+                                                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                                                            <strong className="text-slate-700">
+                                                                                {sub.quantidade *
+                                                                                    qtd}
+                                                                                x
+                                                                            </strong>{" "}
+                                                                            {
+                                                                                sub.nome
+                                                                            }
+                                                                        </span>
+                                                                        <button
+                                                                            onClick={() =>
+                                                                                abrirReceita(
+                                                                                    sub.nome,
+                                                                                )
+                                                                            }
+                                                                            className="text-amber-600 bg-amber-50 p-1 rounded-md opacity-0 group-hover/sub:opacity-100 transition-opacity"
+                                                                            title={`Ver Receita: ${sub.nome}`}
+                                                                        >
+                                                                            <ChefHat
+                                                                                size={
+                                                                                    12
+                                                                                }
+                                                                            />
+                                                                        </button>
+                                                                    </div>
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    )}
                                             </div>
                                         );
                                     })}
@@ -290,41 +381,58 @@ export default function AbaKanban({ nomeDaLoja }) {
                                     </button>
                                 )}
                                 {statusLista === "pronto" && (
-                                    <button
-                                        onClick={() =>
-                                            atualizarStatus(
-                                                pedido.id,
-                                                "entregue",
-                                            )
-                                        }
-                                        className={`w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black shadow-md transition-all active:scale-95 flex justify-center items-center gap-2`}
-                                    >
-                                        <Package size={18} /> Finalizar Entrega
-                                    </button>
-                                )}
-
-                                {/* BOTÃO DE EMISSÃO FISCAL */}
-                                {configLoja?.modulos?.includes("fiscal") &&
-                                    ["pronto", "entregue"].includes(
-                                        statusLista,
-                                    ) && (
+                                    <>
                                         <button
                                             onClick={() =>
-                                                abrirModalEmissao(pedido)
+                                                atualizarStatus(
+                                                    pedido.id,
+                                                    "entregue",
+                                                )
                                             }
-                                            disabled={pedido.nfEmitida}
-                                            className={`w-full mt-2 py-2.5 border-2 ${
-                                                pedido.nfEmitida
-                                                    ? "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed"
-                                                    : "border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95"
-                                            } rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2`}
+                                            className={`w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black shadow-md transition-all active:scale-95 flex justify-center items-center gap-2`}
                                         >
-                                            <Receipt size={16} />
-                                            {pedido.nfEmitida
-                                                ? "Nota Emitida"
-                                                : "Emitir NF-e / NFC-e"}
+                                            <Package size={18} /> Finalizar
+                                            Entrega
                                         </button>
-                                    )}
+
+                                        {/* AÇÕES FISCAIS: EMITIR OU IMPRIMIR */}
+                                        {configLoja?.modulos?.includes(
+                                            "fiscal",
+                                        ) && (
+                                            <div className="flex gap-2 mt-2">
+                                                {/* BOTÃO DE EMITIR: Só aparece se a NF ainda NÃO foi emitida */}
+                                                {!pedido.nfEmitida && (
+                                                    <button
+                                                        onClick={() =>
+                                                            abrirModalEmissao(
+                                                                pedido,
+                                                            )
+                                                        }
+                                                        className="w-full py-2.5 border-2 border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2"
+                                                    >
+                                                        <Receipt size={16} />{" "}
+                                                        Emitir NFC-e
+                                                    </button>
+                                                )}
+
+                                                {/* BOTÃO DE IMPRIMIR: Só aparece se o PDF já foi retornado e salvo no Firebase */}
+                                                {pedido.caminhoPdf && (
+                                                    <button
+                                                        onClick={() =>
+                                                            imprimirNFCe(
+                                                                pedido.caminhoPdf,
+                                                            )
+                                                        }
+                                                        className="w-full py-2.5 border-2 border-green-100 bg-green-50 text-green-700 hover:bg-green-100 active:scale-95 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2"
+                                                    >
+                                                        <Printer size={16} />{" "}
+                                                        Imprimir Cupom
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         );
                     })}

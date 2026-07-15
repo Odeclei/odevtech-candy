@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
     ShoppingCart,
@@ -6,11 +6,14 @@ import {
     Minus,
     X,
     Phone,
-    ShoppingBag,
-    Lock,
     Store,
     Utensils,
     CheckCircle,
+    User,
+    SlidersHorizontal,
+    Receipt,
+    Layers,
+    Search,
 } from "lucide-react";
 import {
     collection,
@@ -27,88 +30,50 @@ import { db } from "../firebase";
 import { gerarPixCopiaECola } from "../utils/pixUtils";
 import { QRCodeCanvas } from "qrcode.react";
 
-const CATALOGO_TEMAS = {
-    pink: {
-        bgFundo: "bg-pink-50",
-        bgSecundario: "bg-pink-100",
-        texto: "text-pink-600",
-        bgDestaque: "bg-pink-600",
-        hoverBgDestaque: "hover:bg-pink-700",
-        hoverBotaoEscuro: "hover:bg-pink-600",
-        borda: "border-pink-100",
-        bordaForte: "border-pink-200",
-        hoverBorda: "hover:border-pink-300",
-        hoverTexto: "hover:text-pink-600",
-        hoverBgSecundario: "hover:bg-pink-50",
-        shadow: "shadow-pink-200",
-        bgIconeCarrinho: "bg-pink-500",
-        ring: "focus:ring-pink-400",
-    },
-    amber: {
-        bgFundo: "bg-amber-50",
-        bgSecundario: "bg-amber-100",
-        texto: "text-amber-600",
-        bgDestaque: "bg-amber-600",
-        hoverBgDestaque: "hover:bg-amber-700",
-        hoverBotaoEscuro: "hover:bg-amber-600",
-        borda: "border-amber-100",
-        bordaForte: "border-amber-200",
-        hoverBorda: "hover:border-amber-300",
-        hoverTexto: "hover:text-amber-600",
-        hoverBgSecundario: "hover:bg-amber-50",
-        shadow: "shadow-amber-200",
-        bgIconeCarrinho: "bg-amber-500",
-        ring: "focus:ring-amber-400",
-    },
-    blue: {
-        bgFundo: "bg-blue-50",
-        bgSecundario: "bg-blue-100",
-        texto: "text-blue-600",
-        bgDestaque: "bg-blue-600",
-        hoverBgDestaque: "hover:bg-blue-700",
-        hoverBotaoEscuro: "hover:bg-blue-600",
-        borda: "border-blue-100",
-        bordaForte: "border-blue-200",
-        hoverBorda: "hover:border-blue-300",
-        hoverTexto: "hover:text-blue-600",
-        hoverBgSecundario: "hover:bg-blue-50",
-        shadow: "shadow-blue-200",
-        bgIconeCarrinho: "bg-blue-500",
-        ring: "focus:ring-blue-400",
-    },
-    emerald: {
-        bgFundo: "bg-emerald-50",
-        bgSecundario: "bg-emerald-100",
-        texto: "text-emerald-600",
-        bgDestaque: "bg-emerald-600",
-        hoverBgDestaque: "hover:bg-emerald-700",
-        hoverBotaoEscuro: "hover:bg-emerald-600",
-        borda: "border-emerald-100",
-        bordaForte: "border-emerald-200",
-        hoverBorda: "hover:border-emerald-300",
-        hoverTexto: "hover:text-emerald-600",
-        hoverBgSecundario: "hover:bg-emerald-50",
-        shadow: "shadow-emerald-200",
-        bgIconeCarrinho: "bg-emerald-500",
-        ring: "focus:ring-emerald-400",
-    },
-    slate: {
-        bgFundo: "bg-slate-100",
-        bgSecundario: "bg-slate-200",
-        texto: "text-slate-800",
-        bgDestaque: "bg-slate-800",
-        hoverBgDestaque: "hover:bg-slate-900",
-        hoverBotaoEscuro: "hover:bg-slate-800",
-        borda: "border-slate-200",
-        bordaForte: "border-slate-300",
-        hoverBorda: "hover:border-slate-400",
-        hoverTexto: "hover:text-slate-800",
-        hoverBgSecundario: "hover:bg-slate-100",
-        shadow: "shadow-slate-300",
-        bgIconeCarrinho: "bg-slate-700",
-        ring: "focus:ring-slate-400",
-    },
-};
+// --- COMPONENTE CARROSSEL DE IMAGENS ---
+function ProductImageCarousel({ imagens, alt }) {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    useEffect(() => {
+        if (!imagens || imagens.length <= 1) return;
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % imagens.length);
+        }, 3500); // Troca a foto a cada 3.5s
+        return () => clearInterval(interval);
+    }, [imagens]);
+
+    if (!imagens || imagens.length === 0)
+        return (
+            <img
+                src="https://placehold.co/400?text=Sem+Foto"
+                alt="Sem Foto"
+                className="w-full h-full object-cover"
+            />
+        );
+
+    return (
+        <div className="relative w-full h-full overflow-hidden group">
+            {imagens.map((img, i) => (
+                <img
+                    key={i}
+                    src={img}
+                    alt={alt}
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === currentIndex ? "opacity-100" : "opacity-0"}`}
+                />
+            ))}
+            {imagens.length > 1 && (
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                    {imagens.map((_, i) => (
+                        <div
+                            key={i}
+                            className={`h-1.5 rounded-full transition-all shadow-sm ${i === currentIndex ? "w-4 bg-white" : "w-1.5 bg-white/60"}`}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function Catalogo() {
     const { nomeDaLoja } = useParams();
@@ -118,20 +83,37 @@ export default function Catalogo() {
     const [configLoja, setConfigLoja] = useState(null);
     const [loadingConfig, setLoadingConfig] = useState(true);
     const [carrinho, setCarrinho] = useState([]);
+    const [produtosDaLoja, setProdutosDaLoja] = useState([]);
 
     const [nomeCliente, setNomeCliente] = useState("");
     const [telefoneCliente, setTelefoneCliente] = useState("");
     const [dataEntrega, setDataEntrega] = useState("");
-    // eslint-disable-next-line no-unused-vars
     const [cpfCliente, setCpfCliente] = useState("");
     const [enderecoCliente, setEnderecoCliente] = useState("");
 
+    const [modalCarrinhoAberto, setModalCarrinhoAberto] = useState(false);
     const [mostrarModalPix, setMostrarModalPix] = useState(false);
     const [mostrarModalSucessoMesa, setMostrarModalSucessoMesa] =
         useState(false);
     const [pixPayload, setPixPayload] = useState("");
-    const [produtosDaLoja, setProdutosDaLoja] = useState([]);
     const [processandoPedido, setProcessandoPedido] = useState(false);
+    const [termoBusca, setTermoBusca] = useState("");
+
+    // --- ESTADOS DO MODAL DE KIT/COMBO ---
+    const [modalKitAberto, setModalKitAberto] = useState(false);
+    const [kitAtivo, setKitAtivo] = useState(null);
+    const [selecoesKit, setSelecoesKit] = useState({});
+
+    // Mapeamento de cores de retrocompatibilidade
+    const mapTemaCor = {
+        pink: "#ec4899",
+        amber: "#f59e0b",
+        blue: "#3b82f6",
+        emerald: "#10b981",
+        slate: "#0f172a",
+    };
+    const corPrincipal =
+        configLoja?.corPrincipal || mapTemaCor[configLoja?.tema] || "#EA1D2C"; // iFood Red default
 
     useEffect(() => {
         setLoadingConfig(true);
@@ -165,23 +147,112 @@ export default function Catalogo() {
         );
     }, [nomeDaLoja]);
 
+    // ==========================================
+    // LÓGICA DE CARRINHO E KITS
+    // ==========================================
+    const abrirModalKit = (produto) => {
+        setKitAtivo(produto);
+        const selecoesIniciais = {};
+        (produto.kitGroups || []).forEach((g) => {
+            selecoesIniciais[g.id] = {};
+        });
+        setSelecoesKit(selecoesIniciais);
+        setModalKitAberto(true);
+    };
+
+    const alterarQtdSubitemKit = (grupoId, produtoId, delta, maxGrupo) => {
+        setSelecoesKit((prev) => {
+            const grupo = prev[grupoId] || {};
+            const qtdAtual = grupo[produtoId] || 0;
+            const novaQtd = Math.max(0, qtdAtual + delta);
+
+            const totalNoGrupo = Object.values(grupo).reduce(
+                (a, b) => a + b,
+                0,
+            );
+            if (delta > 0 && totalNoGrupo >= maxGrupo) return prev; // Bloqueia se atingiu máximo do grupo
+
+            return { ...prev, [grupoId]: { ...grupo, [produtoId]: novaQtd } };
+        });
+    };
+
+    const todosGruposValidos = kitAtivo?.kitGroups?.every((g) => {
+        const total = Object.values(selecoesKit[g.id] || {}).reduce(
+            (a, b) => a + b,
+            0,
+        );
+        return total >= g.min && total <= g.max;
+    });
+
+    let totalAdicionalKit = 0;
+    kitAtivo?.kitGroups?.forEach((g) => {
+        g.opcoes?.forEach((op) => {
+            const qtd = selecoesKit[g.id]?.[op.produtoId] || 0;
+            totalAdicionalKit += (op.adicional || 0) * qtd;
+        });
+    });
+    const precoCalculadoKit =
+        (kitAtivo?.precoBase || kitAtivo?.preco || 0) + totalAdicionalKit;
+
+    const salvarKitNoCarrinho = () => {
+        if (!todosGruposValidos) return;
+
+        const subitensArray = [];
+        kitAtivo.kitGroups.forEach((g) => {
+            g.opcoes.forEach((op) => {
+                const qtd = selecoesKit[g.id]?.[op.produtoId] || 0;
+                if (qtd > 0)
+                    subitensArray.push({
+                        produtoId: op.produtoId,
+                        nome: op.nome,
+                        quantidade: qtd,
+                        adicional: op.adicional || 0,
+                    });
+            });
+        });
+
+        const novoItem = {
+            cartId: Date.now() + Math.random(), // Unique ID crucial para Kits iguais com opções diferentes
+            id: kitAtivo.id,
+            nome: kitAtivo.nome,
+            imagem: kitAtivo.imagens?.[0] || kitAtivo.imagem,
+            isKit: true,
+            quantidade: 1,
+            preco: precoCalculadoKit,
+            subitensSelecionados: subitensArray,
+        };
+
+        setCarrinho([...carrinho, novoItem]);
+        setModalKitAberto(false);
+    };
+
     const adicionarAoCarrinho = (produto) => {
-        const itemJaExiste = carrinho.find((item) => item.id === produto.id);
-        if (itemJaExiste)
+        if (produto.isKit) return abrirModalKit(produto);
+
+        // Agrupa apenas se NÃO for Kit
+        const itemJaExiste = carrinho.find(
+            (item) => item.id === produto.id && !item.isKit,
+        );
+        if (itemJaExiste) {
             setCarrinho(
                 carrinho.map((item) =>
-                    item.id === produto.id
+                    item.id === produto.id && !item.isKit
                         ? { ...item, quantidade: item.quantidade + 1 }
                         : item,
                 ),
             );
-        else setCarrinho([...carrinho, { ...produto, quantidade: 1 }]);
+        } else {
+            setCarrinho([
+                ...carrinho,
+                { ...produto, cartId: Date.now(), quantidade: 1 },
+            ]);
+        }
     };
 
-    const alterarQuantidade = (produtoId, delta) =>
+    const alterarQuantidade = (cartId, delta) => {
         setCarrinho(
             carrinho.map((item) =>
-                item.id === produtoId
+                item.cartId === cartId
                     ? {
                           ...item,
                           quantidade: Math.max(1, item.quantidade + delta),
@@ -189,8 +260,11 @@ export default function Catalogo() {
                     : item,
             ),
         );
-    const removerDoCarrinho = (produtoId) =>
-        setCarrinho(carrinho.filter((item) => item.id !== produtoId));
+    };
+
+    const removerDoCarrinho = (cartId) =>
+        setCarrinho(carrinho.filter((item) => item.cartId !== cartId));
+
     const valorTotal = carrinho.reduce(
         (total, item) => total + item.preco * item.quantidade,
         0,
@@ -201,44 +275,59 @@ export default function Catalogo() {
             style: "currency",
             currency: "BRL",
         }).format(v);
-    const rolarParaCarrinho = () => {
-        const elemento = document.getElementById("carrinho-secao");
-        if (elemento) {
-            elemento.scrollIntoView({ behavior: "smooth" });
-        }
-    };
+
+    // ==========================================
+    // FINALIZAR PEDIDO (COM BAIXA DE ESTOQUE AVANÇADA)
+    // ==========================================
     const finalizarPedido = async () => {
         setProcessandoPedido(true);
-
-        // =========================================================
-        // PASSO 1: IDENTIFICAR ITENS SEM STOCK (PARA ENCOMENDA)
-        // =========================================================
         let itensSemStock = [];
 
+        // PASSO 1: Verificação de Estoque profunda (inclui subitens de Kits)
         for (const item of carrinho) {
-            const pInfo = produtosDaLoja.find((p) => p.id === item.id);
-            if (pInfo) {
-                if (pInfo.fichaTecnica && pInfo.fichaTecnica.length > 0) {
-                    for (const ing of pInfo.fichaTecnica) {
+            const verificarFichaProduto = async (
+                produtoAchecar,
+                qtdMultiplicador,
+            ) => {
+                if (
+                    produtoAchecar.fichaTecnica &&
+                    produtoAchecar.fichaTecnica.length > 0
+                ) {
+                    for (const ing of produtoAchecar.fichaTecnica) {
                         const insSnap = await getDoc(
                             doc(db, "produtos", ing.id_insumo),
                         );
-                        if (insSnap.exists()) {
-                            if (
-                                (insSnap.data().estoqueAtual || 0) <
-                                ing.quantidade * item.quantidade
-                            ) {
-                                if (!itensSemStock.includes(pInfo.nome))
-                                    itensSemStock.push(pInfo.nome);
-                            }
+                        if (
+                            insSnap.exists() &&
+                            (insSnap.data().estoqueAtual || 0) <
+                                ing.quantidade * qtdMultiplicador
+                        ) {
+                            if (!itensSemStock.includes(produtoAchecar.nome))
+                                itensSemStock.push(produtoAchecar.nome);
                         }
                     }
-                } else if (pInfo.controlarEstoque !== false) {
-                    if ((pInfo.estoqueAtual || 0) < item.quantidade) {
-                        if (!itensSemStock.includes(pInfo.nome))
-                            itensSemStock.push(pInfo.nome);
+                } else if (produtoAchecar.controlarEstoque !== false) {
+                    if ((produtoAchecar.estoqueAtual || 0) < qtdMultiplicador) {
+                        if (!itensSemStock.includes(produtoAchecar.nome))
+                            itensSemStock.push(produtoAchecar.nome);
                     }
                 }
+            };
+
+            if (item.isKit) {
+                for (const sub of item.subitensSelecionados) {
+                    const pInfo = produtosDaLoja.find(
+                        (p) => p.id === sub.produtoId,
+                    );
+                    if (pInfo)
+                        await verificarFichaProduto(
+                            pInfo,
+                            sub.quantidade * item.quantidade,
+                        );
+                }
+            } else {
+                const pInfo = produtosDaLoja.find((p) => p.id === item.id);
+                if (pInfo) await verificarFichaProduto(pInfo, item.quantidade);
             }
         }
 
@@ -254,9 +343,73 @@ export default function Catalogo() {
             isEncomenda = true;
         }
 
-        // =========================================================
-        // PASSO 2: FLUXO MESA
-        // =========================================================
+        const baixarEstoqueCompleto = async (identificadorOperacao) => {
+            for (const item of carrinho) {
+                const processarBaixa = async (produtoId, qtdDescontar) => {
+                    const pRef = doc(db, "produtos", produtoId);
+                    const pSnap = await getDoc(pRef);
+                    if (pSnap.exists()) {
+                        const pDB = pSnap.data();
+                        if (pDB.fichaTecnica && pDB.fichaTecnica.length > 0) {
+                            for (const ing of pDB.fichaTecnica) {
+                                const iRef = doc(db, "produtos", ing.id_insumo);
+                                const iSnap = await getDoc(iRef);
+                                if (iSnap.exists()) {
+                                    const novoE =
+                                        (iSnap.data().estoqueAtual || 0) -
+                                        ing.quantidade * qtdDescontar;
+                                    await updateDoc(iRef, {
+                                        estoqueAtual: novoE,
+                                    });
+                                    await addDoc(
+                                        collection(db, "movimentacoes_estoque"),
+                                        {
+                                            loja: nomeDaLoja,
+                                            produtoId: iSnap.id,
+                                            produtoNome: iSnap.data().nome,
+                                            tipo: "saida",
+                                            quantidade:
+                                                ing.quantidade * qtdDescontar,
+                                            motivo: identificadorOperacao,
+                                            data: new Date().toISOString(),
+                                        },
+                                    );
+                                }
+                            }
+                        } else if (pDB.controlarEstoque !== false) {
+                            const novoE =
+                                (pDB.estoqueAtual || 0) - qtdDescontar;
+                            await updateDoc(pRef, { estoqueAtual: novoE });
+                            await addDoc(
+                                collection(db, "movimentacoes_estoque"),
+                                {
+                                    loja: nomeDaLoja,
+                                    produtoId: pSnap.id,
+                                    produtoNome: pDB.nome,
+                                    tipo: "saida",
+                                    quantidade: qtdDescontar,
+                                    motivo: identificadorOperacao,
+                                    data: new Date().toISOString(),
+                                },
+                            );
+                        }
+                    }
+                };
+
+                if (item.isKit) {
+                    for (const sub of item.subitensSelecionados) {
+                        await processarBaixa(
+                            sub.produtoId,
+                            sub.quantidade * item.quantidade,
+                        );
+                    }
+                } else {
+                    await processarBaixa(item.id, item.quantidade);
+                }
+            }
+        };
+
+        // FLUXO MESA
         if (numeroDaMesa) {
             try {
                 const identificadorMesa = `Mesa ${numeroDaMesa}`;
@@ -272,19 +425,33 @@ export default function Catalogo() {
                     const comandaDoc = snapComandas.docs[0];
                     let itensAtuais = [...(comandaDoc.data().itens || [])];
                     carrinho.forEach((cartItem) => {
-                        const idx = itensAtuais.findIndex(
-                            (i) => i.id_produto === cartItem.id,
-                        );
-                        if (idx >= 0)
-                            itensAtuais[idx].qtd_total += cartItem.quantidade;
-                        else
+                        if (cartItem.isKit) {
                             itensAtuais.push({
                                 id_produto: cartItem.id,
                                 nome: cartItem.nome,
                                 preco: cartItem.preco,
                                 qtd_total: cartItem.quantidade,
                                 qtd_paga: 0,
+                                isKit: true,
+                                subitensSelecionados:
+                                    cartItem.subitensSelecionados,
                             });
+                        } else {
+                            const idx = itensAtuais.findIndex(
+                                (i) => i.id_produto === cartItem.id && !i.isKit,
+                            );
+                            if (idx >= 0)
+                                itensAtuais[idx].qtd_total +=
+                                    cartItem.quantidade;
+                            else
+                                itensAtuais.push({
+                                    id_produto: cartItem.id,
+                                    nome: cartItem.nome,
+                                    preco: cartItem.preco,
+                                    qtd_total: cartItem.quantidade,
+                                    qtd_paga: 0,
+                                });
+                        }
                     });
                     await updateDoc(doc(db, "comandas", comandaDoc.id), {
                         itens: itensAtuais,
@@ -296,6 +463,8 @@ export default function Catalogo() {
                         preco: i.preco,
                         qtd_total: i.quantidade,
                         qtd_paga: 0,
+                        isKit: i.isKit || false,
+                        subitensSelecionados: i.subitensSelecionados || [],
                     }));
                     await addDoc(collection(db, "comandas"), {
                         loja: nomeDaLoja,
@@ -317,65 +486,18 @@ export default function Catalogo() {
                     valorTotal: valorTotal,
                     status: "agendado",
                     criadoEm: new Date().toISOString(),
-                    temEncomenda: isEncomenda, // <--- FLAG PARA A COZINHA!
+                    temEncomenda: isEncomenda,
                 });
 
-                // Baixa no Stock (Vai ficar negativo se for encomenda, o que é correto para a OP)
-                for (const item of carrinho) {
-                    const pRef = doc(db, "produtos", item.id);
-                    const pSnap = await getDoc(pRef);
-                    if (pSnap.exists()) {
-                        const pDB = pSnap.data();
-                        if (pDB.fichaTecnica && pDB.fichaTecnica.length > 0) {
-                            for (const ing of pDB.fichaTecnica) {
-                                const iRef = doc(db, "produtos", ing.id_insumo);
-                                const iSnap = await getDoc(iRef);
-                                if (iSnap.exists()) {
-                                    const novoE =
-                                        (iSnap.data().estoqueAtual || 0) -
-                                        ing.quantidade * item.quantidade;
-                                    await updateDoc(iRef, {
-                                        estoqueAtual: novoE,
-                                    });
-                                    await addDoc(
-                                        collection(db, "movimentacoes_estoque"),
-                                        {
-                                            loja: nomeDaLoja,
-                                            produtoId: iSnap.id,
-                                            produtoNome: iSnap.data().nome,
-                                            tipo: "saida",
-                                            quantidade:
-                                                ing.quantidade *
-                                                item.quantidade,
-                                            motivo: `Autoatendimento (${identificadorMesa})`,
-                                            data: new Date().toISOString(),
-                                        },
-                                    );
-                                }
-                            }
-                        } else if (pDB.controlarEstoque !== false) {
-                            const novoE =
-                                (pDB.estoqueAtual || 0) - item.quantidade;
-                            await updateDoc(pRef, { estoqueAtual: novoE });
-                            await addDoc(
-                                collection(db, "movimentacoes_estoque"),
-                                {
-                                    loja: nomeDaLoja,
-                                    produtoId: pSnap.id,
-                                    produtoNome: pDB.nome,
-                                    tipo: "saida",
-                                    quantidade: item.quantidade,
-                                    motivo: `Autoatendimento (${identificadorMesa})`,
-                                    data: new Date().toISOString(),
-                                },
-                            );
-                        }
-                    }
-                }
+                await baixarEstoqueCompleto(
+                    `Autoatendimento (${identificadorMesa})`,
+                );
+
                 setCarrinho([]);
+                setModalCarrinhoAberto(false);
                 setMostrarModalSucessoMesa(true);
             } catch (e) {
-                console.log(e);
+                console.error(e);
                 alert("Erro ao enviar pedido.");
             } finally {
                 setProcessandoPedido(false);
@@ -383,33 +505,26 @@ export default function Catalogo() {
             return;
         }
 
-        // =========================================================
-        // PASSO 3: FLUXO DELIVERY
-        // =========================================================
+        // FLUXO DELIVERY
         if (!nomeCliente || !telefoneCliente) {
             setProcessandoPedido(false);
             return alert("Preencha nome e telefone.");
         }
 
-        // Calcula a porcentagem do Sinal baseado na Configuração da Loja
         const percentualSinal =
             configLoja?.percSinal !== undefined
                 ? Number(configLoja.percSinal)
                 : 50;
         const valorSinal = (valorTotal * percentualSinal) / 100;
-
-        // Só gera o código de pix longo se realmente tiver sinal a cobrar
-        const payloadPix =
-            valorSinal > 0
-                ? gerarPixCopiaECola(
-                      configLoja?.chavePix || "000",
-                      configLoja?.nomePix || "Empresa",
-                      configLoja?.cidade || "CIDADE",
-                      valorSinal,
-                  )
-                : "";
-
-        if (valorSinal > 0) setPixPayload(payloadPix);
+        if (valorSinal > 0)
+            setPixPayload(
+                gerarPixCopiaECola(
+                    configLoja?.chavePix || "000",
+                    configLoja?.nomePix || "Empresa",
+                    configLoja?.cidade || "CIDADE",
+                    valorSinal,
+                ),
+            );
 
         try {
             await addDoc(collection(db, "pedidos"), {
@@ -422,45 +537,21 @@ export default function Catalogo() {
                 itens: carrinho,
                 valorTotal,
                 valorSinal,
-                // SE NÃO TIVER SINAL (0), CAI COMO PENDENTE (TRIAGEM) DIRETO
                 status: valorSinal > 0 ? "aguardando_pix" : "pendente",
                 criadoEm: new Date().toISOString(),
-                temEncomenda: isEncomenda, // <--- FLAG PARA A COZINHA!
+                temEncomenda: isEncomenda,
             });
 
-            // Mesma Baixa de Stock do Delivery...
-            for (const item of carrinho) {
-                const pRef = doc(db, "produtos", item.id);
-                const pSnap = await getDoc(pRef);
-                if (pSnap.exists()) {
-                    const pDB = pSnap.data();
-                    if (pDB.fichaTecnica && pDB.fichaTecnica.length > 0) {
-                        for (const ing of pDB.fichaTecnica) {
-                            const iRef = doc(db, "produtos", ing.id_insumo);
-                            const iSnap = await getDoc(iRef);
-                            if (iSnap.exists()) {
-                                const novoE =
-                                    (iSnap.data().estoqueAtual || 0) -
-                                    ing.quantidade * item.quantidade;
-                                await updateDoc(iRef, { estoqueAtual: novoE });
-                            }
-                        }
-                    } else if (pDB.controlarEstoque !== false) {
-                        const novoE = (pDB.estoqueAtual || 0) - item.quantidade;
-                        await updateDoc(pRef, { estoqueAtual: novoE });
-                    }
-                }
-            }
+            await baixarEstoqueCompleto(`Delivery (${nomeCliente})`);
 
-            // DECISÃO FINAL DA TELA
             if (valorSinal > 0) {
                 setMostrarModalPix(true);
             } else {
                 alert("Pedido enviado com sucesso!");
-                enviarWhatsAppReal(false); // Dispara pro zap com a mensagem "Pagamento na entrega"
+                enviarWhatsAppReal(false);
             }
         } catch (e) {
-            console.log(e);
+            console.error(e);
             alert("Erro no pedido.");
         } finally {
             setProcessandoPedido(false);
@@ -469,10 +560,15 @@ export default function Catalogo() {
 
     const enviarWhatsAppReal = (exigiuSinal = true) => {
         let msg = `*Pedido: ${configLoja?.nomeExibicao}*\n*Cliente:* ${nomeCliente}\n\n*Itens:*`;
-        carrinho.forEach((i) => (msg += `\n• ${i.quantidade}x ${i.nome}`));
+        carrinho.forEach((i) => {
+            msg += `\n• ${i.quantidade}x ${i.nome}`;
+            if (i.isKit && i.subitensSelecionados) {
+                i.subitensSelecionados.forEach((sub) => {
+                    msg += `\n   ↳ ${sub.quantidade * i.quantidade}x ${sub.nome}`;
+                });
+            }
+        });
         msg += `\n\n*Total:* ${formatarDinheiro(valorTotal)}\n`;
-
-        // MENSAGEM DINÂMICA
         msg += exigiuSinal
             ? `✅ *Sinal pago!*`
             : `⏳ *Pagamento na entrega/retirada.*`;
@@ -481,275 +577,732 @@ export default function Catalogo() {
             `https://wa.me/${configLoja?.whatsapp}?text=${encodeURIComponent(msg)}`,
             "_blank",
         );
-
-        // FECHA O MODAL E LIMPA O CARRINHO
         setMostrarModalPix(false);
+        setModalCarrinhoAberto(false);
         setCarrinho([]);
     };
-    const tema = CATALOGO_TEMAS[configLoja?.tema] || CATALOGO_TEMAS.pink;
+
+    // --- ORDENAÇÃO DE CATEGORIAS ---
+    const categoriasIniciais = [
+        ...new Set(produtosDaLoja.map((p) => p.categoria || "Outros")),
+    ];
+    const categoriasOrdenadas = configLoja?.ordemCategorias
+        ? categoriasIniciais.sort((a, b) => {
+              const indexA = configLoja.ordemCategorias.indexOf(a);
+              const indexB = configLoja.ordemCategorias.indexOf(b);
+              if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+              if (indexA === -1) return 1;
+              if (indexB === -1) return -1;
+              return indexA - indexB;
+          })
+        : categoriasIniciais.sort((a, b) => a.localeCompare(b));
+
     if (loadingConfig)
         return (
-            <div
-                className={`min-h-screen flex items-center justify-center ${tema.bgFundo}`}
-            >
-                <p className="animate-pulse">A carregar cardápio...</p>
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <p className="animate-pulse font-bold text-slate-400">
+                    Preparando Menu...
+                </p>
             </div>
         );
     if (!configLoja?.nomeExibicao)
         return (
             <div className="text-center p-20">
-                <Store size={48} className="mx-auto mb-4" />
+                <Store size={48} className="mx-auto mb-4 text-slate-300" />
                 <h2>Loja não encontrada</h2>
             </div>
         );
 
-    const categorias = [
-        ...new Set(produtosDaLoja.map((p) => p.categoria || "Outros")),
-    ].sort();
-
     return (
-        <div
-            className={`min-h-screen ${tema.bgFundo} text-slate-800 pb-32 transition-colors duration-500`}
-        >
-            {numeroDaMesa && (
-                <div
-                    className={`${tema.bgDestaque} bg-slate-800 text-white p-2 text-center text-xs font-bold uppercase sticky top-0 z-50`}
-                >
-                    <Utensils size={14} className="inline mr-2" /> Mesa{" "}
-                    {numeroDaMesa}
-                </div>
-            )}
-            <div className="bg-white border-b sticky top-0 z-40 p-4 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    {configLoja.logo && (
+        <div className="bg-[#faf8fe] text-slate-900 font-sans antialiased min-h-screen">
+            {/* TOP BAR */}
+            <header className="flex justify-between items-center w-full px-4 md:px-12 py-4 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200 shadow-sm sticky top-0">
+                <div className="flex items-center gap-4 w-1/3">
+                    {configLoja.logo ? (
                         <img
                             src={configLoja.logo}
-                            className="w-12 h-12 rounded-full object-cover border"
+                            className="w-10 h-10 rounded-full object-cover border"
                         />
+                    ) : (
+                        <Store className="text-slate-400" />
                     )}
-                    <h1 className="font-bold text-slate-800 text-lg">
-                        {configLoja.nomeExibicao}
-                    </h1>
                 </div>
-                {!numeroDaMesa && (
-                    <Link
-                        to={`/login/${nomeDaLoja}`}
-                        className="text-slate-300 hover:text-slate-500"
+                <div className="flex justify-center w-1/3">
+                    <span
+                        className="font-black tracking-tight text-2xl text-center truncate "
+                        style={{ color: corPrincipal }}
                     >
-                        <Lock size={18} />
-                    </Link>
-                )}
-            </div>
-            {/* NOVA NAVEGAÇÃO DE CATEGORIAS */}
-            <div className="bg-white shadow-sm sticky top-[80px] z-30 flex gap-3 overflow-x-auto p-4">
-                {categorias.map((cat) => (
+                        Bem-vindo ao Catálogo: <br />
+                        <span className="font-bold text-3xl mx-2 animate-pulse">
+                            {configLoja.nomeExibicao}
+                        </span>
+                    </span>
+                </div>
+                <div className="flex items-center justify-end gap-6 w-1/3 text-slate-500">
                     <button
-                        key={cat}
-                        onClick={() => {
-                            const el = document.getElementById(
-                                `cat-${cat.replace(/\s+/g, "-")}`,
-                            );
-                            if (el) {
-                                const y =
-                                    el.getBoundingClientRect().top +
-                                    window.scrollY -
-                                    160;
-                                window.scrollTo({ top: y, behavior: "smooth" });
-                            }
-                        }}
-                        className="px-5 py-2 rounded-full font-bold text-sm whitespace-nowrap border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+                        onClick={() =>
+                            carrinho.length > 0 && setModalCarrinhoAberto(true)
+                        }
+                        className="relative hover:opacity-80 transition-opacity"
                     >
-                        {cat}
+                        <ShoppingCart size={24} />
+                        {totalItens > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold">
+                                {totalItens}
+                            </span>
+                        )}
                     </button>
-                ))}
-            </div>
+                    {!numeroDaMesa && (
+                        <Link
+                            to={`/login/${nomeDaLoja}`}
+                            className="hover:opacity-80 hidden md:block"
+                        >
+                            <User size={24} />
+                        </Link>
+                    )}
+                </div>
+            </header>
 
-            <div className="max-w-7xl mx-auto p-4 space-y-12">
-                {categorias.map((cat) => (
-                    <div key={cat} id={`cat-${cat.replace(/\s+/g, "-")}`}>
-                        <h2 className="text-xl text-slate-600 font-black mb-6 border-b-2 inline-block border-slate-200">
+            {numeroDaMesa && (
+                <div className="bg-slate-900 text-white p-2 text-center text-xs font-bold uppercase w-full flex justify-center items-center gap-2">
+                    <Utensils size={14} /> Autoatendimento - Mesa {numeroDaMesa}
+                </div>
+            )}
+
+            <main className="max-w-[1200px] mx-auto pb-32 pt-8">
+                {/* HERO SEARCH */}
+                <section className="px-4 md:px-12 text-center mb-8 flex flex-col items-center">
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6 max-w-3xl leading-tight">
+                        O que você deseja pedir hoje?
+                    </h2>
+                    <div className="relative w-full max-w-2xl mx-auto">
+                        <div className="bg-white border border-slate-200 rounded-full flex items-center p-2 shadow-sm focus-within:shadow-md transition-shadow">
+                            <Search className="text-slate-400 ml-4" size={20} />
+                            <input
+                                value={termoBusca}
+                                onChange={(e) => setTermoBusca(e.target.value)}
+                                className="w-full bg-transparent border-none focus:ring-0 text-base px-4 py-3 outline-none placeholder:text-slate-400"
+                                placeholder="Busque por pratos, combos, ingredientes..."
+                                type="text"
+                            />
+                            {termoBusca && (
+                                <button
+                                    onClick={() => setTermoBusca("")}
+                                    className="mr-2 text-slate-400 hover:text-red-500"
+                                >
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </section>
+                {/* HORIZONTAL CATEGORIES */}
+                <div className="w-full flex space-x-3 overflow-x-auto no-scrollbar pb-2 px-4 md:px-12 snap-x sticky top-[73px] z-30 bg-[#faf8fe]/90 backdrop-blur-md py-4">
+                    <button
+                        onClick={() => {
+                            setTermoBusca("");
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="snap-start shrink-0 px-6 py-2.5 rounded-full text-white font-bold shadow-sm transition-transform active:scale-95"
+                        style={{ backgroundColor: corPrincipal }}
+                    >
+                        Todos
+                    </button>
+                    {categoriasOrdenadas.map((cat) => (
+                        <button
+                            key={cat}
+                            onClick={() => {
+                                // Se houver uma busca ativa, limpa a busca primeiro para revelar a categoria
+                                if (termoBusca) setTermoBusca("");
+
+                                // Aguarda 100ms para o React renderizar a categoria na tela e então rola até ela
+                                setTimeout(() => {
+                                    const el = document.getElementById(
+                                        `cat-${cat.replace(/\s+/g, "-")}`,
+                                    );
+                                    if (el) {
+                                        const y =
+                                            el.getBoundingClientRect().top +
+                                            window.scrollY -
+                                            150;
+                                        window.scrollTo({
+                                            top: y,
+                                            behavior: "smooth",
+                                        });
+                                    }
+                                }, 100);
+                            }}
+                            className="snap-start shrink-0 px-6 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors font-semibold shadow-sm"
+                        >
                             {cat}
-                        </h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {produtosDaLoja
-                                .filter(
-                                    (p) => (p.categoria || "Outros") === cat,
-                                )
-                                .map((prod) => (
-                                    <div
-                                        key={prod.id}
-                                        className="bg-white p-4 rounded-3xl shadow-sm border flex flex-col justify-between"
-                                    >
-                                        <img
-                                            src={prod.imagem}
-                                            className="w-full h-40 object-cover rounded-2xl mb-4 bg-slate-100"
-                                        />
-                                        <div>
-                                            <h3 className="text-slate-600 font-bold">
-                                                {prod.nome}
-                                            </h3>
-                                            <p className="text-xs text-slate-500 mb-4">
-                                                {prod.descricao}
-                                            </p>
+                        </button>
+                    ))}
+                </div>
+                {/* PRODUCT GRID */}
+                <section className="px-4 md:px-12 mt-4 space-y-12">
+                    {categoriasOrdenadas.map((cat) => {
+                        // Função inteligente para remover acentos (ex: açaí vira acai)
+                        const normalizeText = (text) =>
+                            text
+                                ? text
+                                      .normalize("NFD")
+                                      .replace(/[\u0300-\u036f]/g, "")
+                                      .toLowerCase()
+                                : "";
+
+                        // 1. Aplica o filtro de busca
+                        const produtosDestaCategoria = produtosDaLoja.filter(
+                            (p) => {
+                                const pertenceAcategoria =
+                                    (p.categoria || "Outros") === cat;
+                                if (!pertenceAcategoria) return false;
+
+                                if (!termoBusca) return true; // Se não tem busca, mostra tudo
+
+                                const buscaNorm = normalizeText(termoBusca);
+                                return (
+                                    normalizeText(p.nome).includes(buscaNorm) ||
+                                    normalizeText(p.descricao).includes(
+                                        buscaNorm,
+                                    ) ||
+                                    normalizeText(p.categoria).includes(
+                                        buscaNorm,
+                                    )
+                                );
+                            },
+                        );
+
+                        // 2. Esconde a categoria se estiver vazia
+                        if (produtosDestaCategoria.length === 0) return null;
+
+                        return (
+                            <div
+                                key={cat}
+                                id={`cat-${cat.replace(/\s+/g, "-")}`} // <- O .replace corrige o erro de rolagem
+                                className="scroll-mt-32"
+                            >
+                                <h2 className="text-2xl text-slate-800 font-black mb-6">
+                                    {cat}
+                                </h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {produtosDestaCategoria.map((prod) => (
+                                        <div
+                                            key={prod.id}
+                                            onClick={() =>
+                                                prod.isKit &&
+                                                abrirModalKit(prod)
+                                            }
+                                            className="bg-white rounded-[16px] shadow-sm border border-slate-100 overflow-hidden group cursor-pointer hover:-translate-y-1 transition-transform duration-300 flex flex-col h-full relative"
+                                        >
+                                            <div className="relative w-full aspect-[4/3] bg-slate-50 overflow-hidden">
+                                                <ProductImageCarousel
+                                                    imagens={
+                                                        prod.imagens?.length > 0
+                                                            ? prod.imagens
+                                                            : [prod.imagem]
+                                                    }
+                                                    alt={prod.nome}
+                                                />
+                                                {prod.isKit && (
+                                                    <span className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur text-white text-xs font-black px-2.5 py-1 rounded-md flex items-center gap-1 shadow-sm">
+                                                        <Layers size={12} />{" "}
+                                                        COMBO
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="p-4 flex-1 flex flex-col justify-between">
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-slate-800 mb-1 line-clamp-2">
+                                                        {prod.nome}
+                                                    </h3>
+                                                    <p className="text-sm text-slate-500 line-clamp-2 mb-4">
+                                                        {prod.descricao}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-auto">
+                                                    <span
+                                                        className="text-lg font-black"
+                                                        style={{
+                                                            color: corPrincipal,
+                                                        }}
+                                                    >
+                                                        {formatarDinheiro(
+                                                            prod.precoBase ||
+                                                                prod.preco,
+                                                        )}
+                                                    </span>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            adicionarAoCarrinho(
+                                                                prod,
+                                                            );
+                                                        }}
+                                                        className="w-10 h-10 rounded-full text-white flex items-center justify-center shadow-sm active:scale-95 transition-transform hover:opacity-90"
+                                                        style={{
+                                                            backgroundColor:
+                                                                corPrincipal,
+                                                        }}
+                                                    >
+                                                        <Plus size={20} />
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center border-t pt-4">
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {/* Mensagem caso a busca não encontre nada */}
+                    {termoBusca &&
+                        produtosDaLoja.filter((p) => {
+                            const normalizeText = (text) =>
+                                text
+                                    ? text
+                                          .normalize("NFD")
+                                          .replace(/[\u0300-\u036f]/g, "")
+                                          .toLowerCase()
+                                    : "";
+                            const buscaNorm = normalizeText(termoBusca);
+                            return (
+                                normalizeText(p.nome).includes(buscaNorm) ||
+                                normalizeText(p.descricao).includes(
+                                    buscaNorm,
+                                ) ||
+                                normalizeText(p.categoria).includes(buscaNorm)
+                            );
+                        }).length === 0 && (
+                            <div className="text-center py-20">
+                                <Search
+                                    className="mx-auto text-slate-300 mb-4"
+                                    size={48}
+                                />
+                                <h3 className="text-xl font-bold text-slate-600">
+                                    Nenhum produto encontrado
+                                </h3>
+                                <p className="text-slate-400">
+                                    Tente buscar com outras palavras.
+                                </p>
+                            </div>
+                        )}
+                </section>
+            </main>
+
+            {/* ============================================================== */}
+            {/* MODAL DE MONTAR KIT / COMBO */}
+            {/* ============================================================== */}
+            {modalKitAberto && kitAtivo && (
+                <div className="fixed inset-0 bg-slate-900/60 flex justify-center items-end sm:items-center z-50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl h-[85vh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+                        <div className="relative h-48 bg-slate-100 shrink-0">
+                            <img
+                                src={kitAtivo.imagens?.[0] || kitAtivo.imagem}
+                                className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                            <button
+                                onClick={() => setModalKitAberto(false)}
+                                className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-2 rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                            <h2 className="absolute bottom-4 left-5 right-5 text-2xl font-black text-white leading-tight drop-shadow-md">
+                                {kitAtivo.nome}
+                            </h2>
+                        </div>
+
+                        <div className="p-5 flex-1 overflow-y-auto bg-slate-50">
+                            <p className="text-slate-600 text-sm mb-6 bg-white p-3 rounded-xl border border-slate-100">
+                                {kitAtivo.descricao}
+                            </p>
+
+                            {kitAtivo.kitGroups?.map((grupo, idx) => {
+                                const totalSelecionado = Object.values(
+                                    selecoesKit[grupo.id] || {},
+                                ).reduce((a, b) => a + b, 0);
+                                const atingiuMaximo =
+                                    totalSelecionado >= grupo.max;
+                                const concluido =
+                                    totalSelecionado >= grupo.min &&
+                                    totalSelecionado <= grupo.max;
+
+                                return (
+                                    <div
+                                        key={grupo.id}
+                                        className="mb-5 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"
+                                    >
+                                        <div className="bg-slate-100/50 p-4 border-b border-slate-100 flex justify-between items-center">
+                                            <div>
+                                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                                    {concluido && (
+                                                        <CheckCircle
+                                                            size={16}
+                                                            className="text-emerald-500"
+                                                        />
+                                                    )}{" "}
+                                                    {grupo.titulo}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 mt-0.5 uppercase font-bold tracking-wide">
+                                                    Escolha de {grupo.min} até{" "}
+                                                    {grupo.max} opções
+                                                </p>
+                                            </div>
                                             <span
-                                                className={`font-black ${tema.texto}`}
+                                                className={`text-xs font-black px-2.5 py-1 rounded-lg ${concluido ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}
                                             >
-                                                {formatarDinheiro(prod.preco)}
+                                                {totalSelecionado}/{grupo.max}
                                             </span>
+                                        </div>
+                                        <div className="p-2">
+                                            {grupo.opcoes?.map((op) => {
+                                                const qtdOpcao =
+                                                    selecoesKit[grupo.id]?.[
+                                                        op.produtoId
+                                                    ] || 0;
+                                                return (
+                                                    <div
+                                                        key={op.produtoId}
+                                                        className="flex justify-between items-center p-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 rounded-xl transition-colors"
+                                                    >
+                                                        <div className="flex-1 pr-4">
+                                                            <p className="font-semibold text-slate-700 text-sm">
+                                                                {op.nome}
+                                                            </p>
+                                                            {op.adicional >
+                                                                0 && (
+                                                                <p className="text-xs text-emerald-600 font-black mt-0.5">
+                                                                    +{" "}
+                                                                    {formatarDinheiro(
+                                                                        op.adicional,
+                                                                    )}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <button
+                                                                onClick={() =>
+                                                                    alterarQtdSubitemKit(
+                                                                        grupo.id,
+                                                                        op.produtoId,
+                                                                        -1,
+                                                                        grupo.max,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    qtdOpcao ===
+                                                                    0
+                                                                }
+                                                                className="w-8 h-8 rounded-full border-2 border-slate-200 flex items-center justify-center text-slate-400 disabled:opacity-30 active:scale-95"
+                                                            >
+                                                                <Minus
+                                                                    size={14}
+                                                                />
+                                                            </button>
+                                                            <span className="w-4 text-center font-bold text-slate-800">
+                                                                {qtdOpcao}
+                                                            </span>
+                                                            <button
+                                                                onClick={() =>
+                                                                    alterarQtdSubitemKit(
+                                                                        grupo.id,
+                                                                        op.produtoId,
+                                                                        1,
+                                                                        grupo.max,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    atingiuMaximo
+                                                                }
+                                                                className="w-8 h-8 rounded-full flex items-center justify-center text-white disabled:opacity-30 disabled:grayscale active:scale-95"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        corPrincipal,
+                                                                }}
+                                                            >
+                                                                <Plus
+                                                                    size={14}
+                                                                />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="p-5 bg-white border-t border-slate-100 shrink-0">
+                            <button
+                                onClick={salvarKitNoCarrinho}
+                                disabled={!todosGruposValidos}
+                                className="w-full py-4 rounded-2xl font-black text-white flex justify-between items-center px-6 transition-all shadow-lg disabled:opacity-50 disabled:grayscale active:scale-95"
+                                style={{ backgroundColor: corPrincipal }}
+                            >
+                                <span>
+                                    {todosGruposValidos
+                                        ? "Adicionar ao Pedido"
+                                        : "Seleção Incompleta"}
+                                </span>
+                                <span>
+                                    {formatarDinheiro(precoCalculadoKit)}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* MODAL DO CARRINHO LATERAL / FULLSCREEN */}
+            {/* ============================================================== */}
+            {modalCarrinhoAberto && (
+                <div className="fixed inset-0 bg-slate-900/50 flex justify-end z-[60] backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full md:max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <ShoppingCart
+                                    size={24}
+                                    style={{ color: corPrincipal }}
+                                />{" "}
+                                Seu Pedido
+                            </h2>
+                            <button
+                                onClick={() => setModalCarrinhoAberto(false)}
+                                className="p-2 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                            {carrinho.length === 0 ? (
+                                <div className="text-center text-slate-400 mt-20 font-medium">
+                                    Seu carrinho está vazio.
+                                </div>
+                            ) : (
+                                <div className="space-y-4 mb-8">
+                                    {carrinho.map((i) => (
+                                        <div
+                                            key={i.cartId}
+                                            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm relative"
+                                        >
                                             <button
                                                 onClick={() =>
-                                                    adicionarAoCarrinho(prod)
+                                                    removerDoCarrinho(i.cartId)
                                                 }
-                                                className={`bg-slate-900 text-white p-2 rounded-xl active:scale-95 ${tema.hoverBotaoEscuro}`}
+                                                className="absolute top-2 right-2 text-slate-300 hover:text-red-500"
                                             >
-                                                <Plus size={20} />
+                                                <X size={16} />
                                             </button>
+                                            <div className="flex gap-3 mb-3">
+                                                <img
+                                                    src={i.imagem}
+                                                    className="w-16 h-16 rounded-xl object-cover bg-slate-100"
+                                                />
+                                                <div className="pr-4">
+                                                    <p className="font-bold text-slate-800 text-sm leading-tight">
+                                                        {i.nome}
+                                                    </p>
+                                                    <p
+                                                        className="text-xs font-black mt-1"
+                                                        style={{
+                                                            color: corPrincipal,
+                                                        }}
+                                                    >
+                                                        {formatarDinheiro(
+                                                            i.preco,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {/* Subitens do Combo */}
+                                            {i.isKit &&
+                                                i.subitensSelecionados && (
+                                                    <div className="bg-slate-50 p-2 rounded-lg mb-3 border border-slate-100">
+                                                        {i.subitensSelecionados.map(
+                                                            (sub, sIdx) => (
+                                                                <p
+                                                                    key={sIdx}
+                                                                    className="text-[11px] text-slate-500 font-medium flex items-center gap-1"
+                                                                >
+                                                                    <CheckCircle
+                                                                        size={
+                                                                            10
+                                                                        }
+                                                                        className="text-emerald-400"
+                                                                    />{" "}
+                                                                    {
+                                                                        sub.quantidade
+                                                                    }
+                                                                    x {sub.nome}
+                                                                </p>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                )}
+                                            <div className="flex items-center gap-3 bg-slate-100 w-fit px-2 py-1 rounded-xl">
+                                                <button
+                                                    onClick={() =>
+                                                        alterarQuantidade(
+                                                            i.cartId,
+                                                            -1,
+                                                        )
+                                                    }
+                                                    className="p-1 text-slate-600"
+                                                >
+                                                    <Minus size={14} />
+                                                </button>
+                                                <span className="font-black text-sm w-4 text-center text-slate-800">
+                                                    {i.quantidade}
+                                                </span>
+                                                <button
+                                                    onClick={() =>
+                                                        alterarQuantidade(
+                                                            i.cartId,
+                                                            1,
+                                                        )
+                                                    }
+                                                    className="p-1 text-slate-600"
+                                                >
+                                                    <Plus size={14} />
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                        </div>
-                    </div>
-                ))}
-
-                {carrinho.length > 0 && (
-                    <div
-                        id="carrinho-secao"
-                        className="max-w-xl mx-auto bg-white p-6 rounded-3xl shadow-xl border scroll-mt-32 mt-12"
-                    >
-                        <h2 className="text-xl text-slate-600 font-bold mb-6 flex items-center gap-2">
-                            <ShoppingCart className={tema.texto} /> Seu Pedido
-                        </h2>
-                        <div className="space-y-3 mb-8">
-                            {carrinho.map((i) => (
-                                <div
-                                    key={i.id}
-                                    className="flex justify-between items-center bg-slate-50 p-3 rounded-2xl"
-                                >
-                                    <div>
-                                        <p className="font-bold text-sm">
-                                            {i.nome}
-                                        </p>
-                                        <p className="text-xs text-slate-400">
-                                            {formatarDinheiro(i.preco)}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-xl border shadow-sm">
-                                        <button
-                                            onClick={() =>
-                                                alterarQuantidade(i.id, -1)
-                                            }
-                                        >
-                                            <Minus size={14} />
-                                        </button>
-                                        <span className="font-bold text-sm w-4 text-center">
-                                            {i.quantidade}
-                                        </span>
-                                        <button
-                                            onClick={() =>
-                                                alterarQuantidade(i.id, 1)
-                                            }
-                                        >
-                                            <Plus size={14} />
-                                        </button>
-                                    </div>
-                                    <button
-                                        onClick={() => removerDoCarrinho(i.id)}
-                                        className="text-red-400 p-2"
-                                    >
-                                        <X size={18} />
-                                    </button>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                        <div
-                            className={`p-4 rounded-2xl mb-8 flex justify-between font-black ${tema.bgSecundario} ${tema.texto}`}
-                        >
-                            <span>Total:</span>
-                            <span>{formatarDinheiro(valorTotal)}</span>
+                            )}
+
+                            {carrinho.length > 0 && (
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                    <div className="flex justify-between font-black text-lg border-b border-slate-100 pb-4 text-slate-800">
+                                        <span>Total:</span>
+                                        <span style={{ color: corPrincipal }}>
+                                            {formatarDinheiro(valorTotal)}
+                                        </span>
+                                    </div>
+
+                                    {!numeroDaMesa ? (
+                                        <div className="space-y-3 pt-2">
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                                                Dados da Entrega / Retirada
+                                            </p>
+                                            <input
+                                                type="text"
+                                                placeholder="Seu Nome *"
+                                                value={nomeCliente}
+                                                onChange={(e) =>
+                                                    setNomeCliente(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                            />
+                                            <input
+                                                type="tel"
+                                                placeholder="WhatsApp *"
+                                                value={telefoneCliente}
+                                                onChange={(e) =>
+                                                    setTelefoneCliente(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Endereço Completo (Opcional)"
+                                                value={enderecoCliente}
+                                                onChange={(e) =>
+                                                    setEnderecoCliente(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                            />
+                                            <input
+                                                type="datetime-local"
+                                                value={dataEntrega}
+                                                onChange={(e) =>
+                                                    setDataEntrega(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium text-slate-500"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="pt-2">
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">
+                                                Identificação (Opcional)
+                                            </p>
+                                            <input
+                                                type="text"
+                                                placeholder="Como podemos te chamar?"
+                                                value={nomeCliente}
+                                                onChange={(e) =>
+                                                    setNomeCliente(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
-                        {!numeroDaMesa ? (
-                            <div className="space-y-4">
-                                <input
-                                    type="text"
-                                    placeholder="Seu Nome *"
-                                    value={nomeCliente}
-                                    onChange={(e) =>
-                                        setNomeCliente(e.target.value)
-                                    }
-                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
-                                />
-                                <input
-                                    type="tel"
-                                    placeholder="WhatsApp *"
-                                    value={telefoneCliente}
-                                    onChange={(e) =>
-                                        setTelefoneCliente(e.target.value)
-                                    }
-                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="Endereço (Opcional)"
-                                    value={enderecoCliente}
-                                    onChange={(e) =>
-                                        setEnderecoCliente(e.target.value)
-                                    }
-                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
-                                />
-                                <input
-                                    type="datetime-local"
-                                    value={dataEntrega}
-                                    onChange={(e) =>
-                                        setDataEntrega(e.target.value)
-                                    }
-                                    className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
-                                />
+                        {carrinho.length > 0 && (
+                            <div className="p-6 bg-white border-t border-slate-100 shrink-0">
+                                <button
+                                    onClick={finalizarPedido}
+                                    disabled={processandoPedido}
+                                    className="w-full py-4 rounded-2xl font-black text-white shadow-lg active:scale-95 disabled:opacity-50 transition-all flex justify-center items-center gap-2"
+                                    style={{ backgroundColor: corPrincipal }}
+                                >
+                                    {processandoPedido ? (
+                                        "Processando..."
+                                    ) : numeroDaMesa ? (
+                                        <>
+                                            <Utensils size={18} /> Enviar para
+                                            Cozinha
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Receipt size={18} /> Avançar para
+                                            Pagamento
+                                        </>
+                                    )}
+                                </button>
                             </div>
-                        ) : (
-                            <input
-                                type="text"
-                                placeholder="Seu Nome (Opcional)"
-                                value={nomeCliente}
-                                onChange={(e) => setNomeCliente(e.target.value)}
-                                className={`w-full p-4 border rounded-2xl outline-none focus:ring-2 ${tema.ring}`}
-                            />
                         )}
-
-                        <button
-                            onClick={finalizarPedido}
-                            disabled={processandoPedido}
-                            className={`w-full py-4 rounded-2xl mt-8 font-bold text-white shadow-lg ${tema.bgDestaque} disabled:opacity-50 active:scale-95`}
-                        >
-                            {processandoPedido
-                                ? "Processando..."
-                                : numeroDaMesa
-                                  ? "Enviar para Cozinha"
-                                  : "Avançar para Pagamento"}
-                        </button>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
+            {/* MODAL SUCESSO MESA */}
             {mostrarModalSucessoMesa && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-8 rounded-3xl text-center max-w-sm w-full">
+                <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-[70] backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-8 rounded-3xl text-center max-w-sm w-full shadow-2xl">
                         <CheckCircle
-                            size={48}
+                            size={56}
                             className="text-emerald-500 mx-auto mb-4"
                         />
-                        <h2 className="text-xl text-slate-700 font-bold mb-2">
+                        <h2 className="text-2xl text-slate-800 font-black mb-2">
                             Pedido Enviado!
                         </h2>
-                        <p className="text-slate-500 mb-6">
+                        <p className="text-slate-500 mb-8 font-medium">
                             Seus itens já estão em produção para a Mesa{" "}
                             {numeroDaMesa}.
                         </p>
                         <button
                             onClick={() => window.location.reload()}
-                            className={`w-full py-4 rounded-2xl font-bold text-white ${tema.bgDestaque}`}
+                            className="w-full py-4 rounded-2xl font-black text-white active:scale-95 transition-transform shadow-lg"
+                            style={{ backgroundColor: corPrincipal }}
                         >
                             Continuar no Cardápio
                         </button>
@@ -757,27 +1310,27 @@ export default function Catalogo() {
                 </div>
             )}
 
+            {/* MODAL PIX DELIVERY */}
             {mostrarModalPix && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full relative">
+                <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-[70] overflow-y-auto backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-8 rounded-3xl text-center max-w-md w-full relative shadow-2xl">
                         <button
                             onClick={() => setMostrarModalPix(false)}
-                            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors"
+                            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full"
                         >
                             <X size={20} />
                         </button>
-
-                        {/* TÍTULO DINÂMICO CONFORME CONFIGURAÇÃO */}
-                        <h2 className="text-xl font-bold mb-4 pt-2">
-                            Pagamento do Sinal ({configLoja?.percSinal ?? 50}%)
+                        <h2 className="text-xl font-black text-slate-800 mb-4 pt-2">
+                            Sinal Obrigatório ({configLoja?.percSinal ?? 50}%)
                         </h2>
-
-                        <div className="bg-pink-50 p-4 rounded-2xl mb-6">
-                            <p className="text-[10px] font-black text-pink-400 uppercase mb-1">
-                                VALOR
+                        <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100">
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-wider">
+                                Valor a transferir
                             </p>
-                            <p className="text-pink-600 font-black text-3xl">
-                                {/* CÁLCULO DINÂMICO DO VALOR DO SINAL */}
+                            <p
+                                className="font-black text-4xl"
+                                style={{ color: corPrincipal }}
+                            >
                                 {formatarDinheiro(
                                     (valorTotal *
                                         (configLoja?.percSinal ?? 50)) /
@@ -785,23 +1338,21 @@ export default function Catalogo() {
                                 )}
                             </p>
                         </div>
-
                         <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 mb-6 flex justify-center">
                             <QRCodeCanvas value={pixPayload} size={200} />
                         </div>
-
                         <button
                             onClick={() => {
                                 navigator.clipboard.writeText(pixPayload);
                                 alert("Código Pix copiado!");
                             }}
-                            className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold mb-3 active:scale-95 flex items-center justify-center gap-2"
+                            className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold mb-3 active:scale-95"
                         >
                             Copiar Código Pix
                         </button>
                         <button
                             onClick={() => enviarWhatsAppReal(true)}
-                            className="w-full py-4 bg-[#25D366] text-white rounded-2xl font-bold active:scale-95"
+                            className="w-full py-4 bg-[#25D366] text-white rounded-2xl font-bold active:scale-95 shadow-lg shadow-[#25D366]/30"
                         >
                             Já paguei! Enviar Comprovante
                         </button>
@@ -809,44 +1360,26 @@ export default function Catalogo() {
                 </div>
             )}
 
-            {carrinho.length > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-50">
+            {/* FLOATING CART BUTTON (MOBILE) */}
+            {carrinho.length > 0 && !modalCarrinhoAberto && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[90%] md:hidden z-40 animate-in slide-in-from-bottom-10">
                     <button
-                        onClick={rolarParaCarrinho}
-                        className={`w-full bg-slate-900 text-white p-5 rounded-3xl shadow-2xl flex justify-between items-center border border-white/10 active:scale-95 ${tema.hoverBgDestaque}`}
+                        onClick={() => setModalCarrinhoAberto(true)}
+                        className="w-full text-white p-4 rounded-full shadow-2xl shadow-black/20 flex justify-between items-center border border-white/20 active:scale-95 transition-transform backdrop-blur-md"
+                        style={{ backgroundColor: corPrincipal }}
                     >
                         <div className="flex items-center gap-3">
-                            <span
-                                className={`${tema.bgIconeCarrinho} w-8 h-8 rounded-full flex items-center justify-center font-bold`}
-                            >
+                            <span className="bg-white/20 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm">
                                 {totalItens}
                             </span>
-                            <span className="font-bold">Ver Carrinho</span>
+                            <span className="font-bold">Ver Pedido</span>
                         </div>
-                        <span className="font-black text-xl">
+                        <span className="font-black text-lg">
                             {formatarDinheiro(valorTotal)}
                         </span>
                     </button>
                 </div>
             )}
-            {/* BOTÃO FLUTUANTE DO WHATSAPP (Apenas para Confeitaria) */}
-            {configLoja?.nicho?.toLowerCase()?.trim() === "delivery" &&
-                configLoja?.whatsapp && (
-                    <a
-                        href={`https://wa.me/${configLoja.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent("Olá! Gostaria de falar sobre uma encomenda.")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="fixed bottom-28 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-xl hover:scale-110 active:scale-95 transition-all z-[100] flex items-center justify-center"
-                        title="Falar no WhatsApp"
-                    >
-                        <Phone size={28} fill="currentColor" />
-                        {/* Bolinha vermelha de notificação para chamar atenção */}
-                        <span className="absolute top-0 right-0 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white"></span>
-                        </span>
-                    </a>
-                )}
         </div>
     );
 }
