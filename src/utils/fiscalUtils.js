@@ -97,37 +97,28 @@ export const gerarPayloadNFCe = (pedido, configLoja, cpfNaNota = "") => {
 
         return {
             numero_item: (index + 1).toString(),
+            codigo_ncm: ncm,
             codigo_produto: item.id || `PROD-${index}`,
             descricao: item.nome.substring(0, 120),
-            cfop: cfop,
-            unidade_comercial: "UN",
             quantidade_comercial: parseFloat(
                 item.quantidade || item.qtd_total || 1,
             ),
-            valor_unitario_comercial: parseFloat(item.preco || 0),
-            valor_unitario_tributavel: parseFloat(item.preco || 0),
-            unidade_tributavel: "UN",
-            codigo_ncm: ncm,
             quantidade_tributavel: parseFloat(
                 item.quantidade || item.qtd_total || 1,
             ),
+            cfop: cfop,
+            valor_unitario_comercial: parseFloat(item.preco || 0),
+            valor_unitario_tributavel: parseFloat(item.preco || 0),
+            valor_bruto: parseFloat(item.preco || 0),
             valor_desconto: 0,
+            unidade_comercial: "UN",
+            unidade_tributavel: "UN",
 
             icms_origem: "0", // 0 = Nacional
             icms_situacao_tributaria: csosn, // CSOSN 102: Tributada pelo Simples Nacional sem permissão de crédito (Ideal para CFOP 5102)
-            pis_situacao_tributaria: "49", // 49 = Outras operações de saída (Padrão para Simples Nacional)
-            cofins_situacao_tributaria: "49", // 49 = Outras operações de saída (Padrão para Simples Nacional)
 
-            // // ✅ Estrutura CORRETA de imposto para Focus NFe (NFC-e)
-            // imposto: {
-            //     ICMS: {
-            //         CSOSN: csosn,
-            //         orig: "0", // 0 = Nacional
-            //         vBC: "0.00",
-            //         pICMS: "0.00",
-            //         vICMS: "0.00",
-            //     },
-            // },
+            // pis_situacao_tributaria: "49", // 49 = Outras operações de saída (Padrão para Simples Nacional)
+            // cofins_situacao_tributaria: "49", // 49 = Outras operações de saída (Padrão para Simples Nacional)
         };
     });
 
@@ -162,11 +153,6 @@ export const gerarPayloadNFCe = (pedido, configLoja, cpfNaNota = "") => {
     } else {
         payload.cpf_destinatario = "00000000000";
     }
-
-    console.log(
-        "📦 Payload FINAL (enviado):",
-        JSON.stringify(payload, null, 2),
-    );
 
     return payload;
 };

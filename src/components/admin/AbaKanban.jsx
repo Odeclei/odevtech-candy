@@ -149,12 +149,19 @@ export default function AbaKanban({ nomeDaLoja }) {
             // CORREÇÃO: Usando a referência correta do documento e fallback para evitar o 'undefined'
             const pedidoRef = doc(db, "pedidos", pedidoNfAlvo.id);
             await updateDoc(pedidoRef, {
+                nfEmitida: true,
                 statusNFCe: resultado.dadosFocus.status || "processando",
                 numeroNota: resultado.dadosFocus.numero || null,
+                // Campos para o histórico:
+                nfceChave: resultado.dadosFocus.chave_nfe || null,
+                nfceDanfe: resultado.dadosFocus.caminho_danfe || null,
+                nfceXml: resultado.dadosFocus.caminho_xml_nota_fiscal || null,
+                nfceEmitidaEm: new Date().toISOString(),
+                nfceCanceladaEm: null,
+                // Campos legados (para compatibilidade com a lógica atual do Kanban):
+                caminhoPdf: resultado.dadosFocus.caminho_danfe || null,
                 caminhoXml:
                     resultado.dadosFocus.caminho_xml_nota_fiscal || null,
-                caminhoPdf: resultado.dadosFocus.caminho_danfe || null,
-                nfEmitida: true, // Adicionando a flag para travar o botão de emitir
             });
 
             alert(
@@ -325,6 +332,7 @@ export default function AbaKanban({ nomeDaLoja }) {
                                                                             <strong className="text-slate-700">
                                                                                 {sub.quantidade *
                                                                                     qtd}
+
                                                                                 x
                                                                             </strong>{" "}
                                                                             {
