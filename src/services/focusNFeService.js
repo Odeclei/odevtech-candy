@@ -4,41 +4,80 @@ import { app } from "../firebase";
 const functions = getFunctions(app, "us-central1");
 
 export const focusNFeService = {
-    async emitirNFCe(nomeDaLoja, payload) {
-        try {
-            // console.log("📤 Enviando:", { lojaId: nomeDaLoja, payload });
+  // ==========================================
+  // EMITIR NFC-e (MODELO 65)
+  // ==========================================
+  async emitirNFCe(nomeDaLoja, payload) {
+    try {
+      console.log("📤 Enviando NFCe:", { lojaId: nomeDaLoja, payload });
+      const emitirNFCeFn = httpsCallable(functions, "emitirNFCe");
+      const result = await emitirNFCeFn({
+        lojaId: nomeDaLoja,
+        payloadNFCe: payload,
+      });
+      console.log("✅ Sucesso emitirNFCe:", result.data);
+      return result.data;
+    } catch (error) {
+      console.error("❌ Erro ao emitir NFCe:", error);
+      throw new Error(error.message || "Falha na emissão da NFC-e");
+    }
+  },
 
-            const emitirNFCeFn = httpsCallable(functions, "emitirNFCe");
+  // ==========================================
+  // CANCELAR NFC-e
+  // ==========================================
+  async cancelarNFCe(
+    nomeDaLoja,
+    referencia,
+    motivo = "Cancelamento por solicitação do cliente",
+  ) {
+    try {
+      const cancelarFn = httpsCallable(functions, "cancelarNFCe");
+      const result = await cancelarFn({
+        lojaId: nomeDaLoja,
+        referencia: referencia,
+        motivo: motivo,
+      });
+      return result.data;
+    } catch (error) {
+      console.error("❌ Erro ao cancelar NFCe:", error);
+      throw new Error(error.message || "Falha no cancelamento");
+    }
+  },
 
-            const result = await emitirNFCeFn({
-                lojaId: nomeDaLoja,
-                payloadNFCe: payload,
-            });
+  // ==========================================
+  // EMITIR NF-e (MODELO 55)
+  // ==========================================
+  async emitirNFe(nomeDaLoja, payload) {
+    try {
+      // console.log("📤 Enviando NFe:", { lojaId: nomeDaLoja, payload });
+      const emitirNFeFn = httpsCallable(functions, "emitirNFe");
+      const result = await emitirNFeFn({
+        lojaId: nomeDaLoja,
+        payloadNFe: payload,
+      });
+      console.log("✅ Sucesso emitirNFe:", result.data);
+      return result.data;
+    } catch (error) {
+      console.error("❌ Erro ao emitir NFe:", error);
+      throw new Error(error.message || "Falha na emissão da NFe");
+    }
+  },
 
-            console.log("✅ Sucesso emitir focusnfeservice:", result.data);
-            return result.data;
-        } catch (error) {
-            console.error("❌ Erro completo:", error);
-            throw new Error(error.message || "Falha na emissão");
-        }
-    },
-
-    async cancelarNFCe(
-        nomeDaLoja,
-        chave,
-        motivo = "Cancelamento por solicitação do cliente",
-    ) {
-        try {
-            const cancelarFn = httpsCallable(functions, "cancelarNFCe");
-            const result = await cancelarFn({
-                lojaId: nomeDaLoja,
-                chave: chave,
-                motivo: motivo,
-            });
-            return result.data;
-        } catch (error) {
-            console.error("❌ Erro ao cancelar:", error);
-            throw new Error(error.message || "Falha no cancelamento");
-        }
-    },
+  // ==========================================
+  // CONSULTAR NF-e (para fallback)
+  // ==========================================
+  async consultarNFe(nomeDaLoja, chave) {
+    try {
+      const consultarFn = httpsCallable(functions, "consultarNFe");
+      const result = await consultarFn({
+        lojaId: nomeDaLoja,
+        chave: chave,
+      });
+      return result.data;
+    } catch (error) {
+      console.error("❌ Erro ao consultar NFe:", error);
+      throw new Error(error.message || "Falha na consulta da NFe");
+    }
+  },
 };

@@ -523,7 +523,8 @@ export default function AbaHistorico({
               ) : (
                 pedidosFiltrados.map((pedido) => {
                   const aReceber = pedido.valorTotal - (pedido.valorSinal || 0);
-                  const nfEmitida = !!pedido.nfEmitida;
+                  const nfEmitida = !!pedido.nfEmitida || pedido.nfeDanfe;
+
                   const temNota = !!pedido.nfceChave;
                   return (
                     <tr
@@ -591,7 +592,11 @@ export default function AbaHistorico({
                             // Pedido com nota emitida
                             <>
                               <button
-                                onClick={() => imprimirNFCe(pedido.caminhoPdf)}
+                                onClick={() =>
+                                  imprimirNFCe(
+                                    pedido.caminhoPdf || pedido.nfeDanfe,
+                                  )
+                                }
                                 className="p-2 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition"
                                 title="Reimprimir DANFE"
                               >
