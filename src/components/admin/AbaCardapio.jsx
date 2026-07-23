@@ -12,6 +12,7 @@ import {
     X,
     Layers,
     Receipt,
+    Minus,
 } from "lucide-react";
 import {
     doc,
@@ -41,6 +42,9 @@ export default function AbaCardapio({
     const [imagensArquivos, setImagensArquivos] = useState([]);
     const [salvandoProduto, setSalvandoProduto] = useState(false);
     const [novoAtivo, setNovoAtivo] = useState(true);
+
+    // --- NOVO ESTADO: QUANTIDADE MÍNIMA ---
+    const [novaQuantidadeMinima, setNovaQuantidadeMinima] = useState(0);
 
     // --- ESTADOS FISCAIS ---
     const [novoNcm, setNovoNcm] = useState("");
@@ -274,6 +278,8 @@ export default function AbaCardapio({
                 ativo: novoAtivo,
                 atualizadoEm: new Date().toISOString(),
                 isKit: isKit,
+                // ✅ NOVO CAMPO: Quantidade mínima por pedido
+                quantidadeMinima: parseFloat(novaQuantidadeMinima) || 0,
             };
 
             if (isKit) {
@@ -316,6 +322,8 @@ export default function AbaCardapio({
                 ? produto.categoria
                 : categoriasDaLoja[0],
         );
+        // ✅ Carregar quantidade mínima
+        setNovaQuantidadeMinima(produto.quantidadeMinima || 0);
 
         // Fiscais
         setNovoNcm(produto.ncm || "");
@@ -346,6 +354,8 @@ export default function AbaCardapio({
         setProdutoImagensAtuais([]);
         setIsKit(false);
         setKitGroups([]);
+        // ✅ Resetar quantidade mínima
+        setNovaQuantidadeMinima(0);
     };
 
     const apagarProduto = async (id) => {
@@ -494,6 +504,47 @@ export default function AbaCardapio({
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    {/* ✅ CAMPO QUANTIDADE MÍNIMA */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">
+                            Quantidade Mínima por Pedido
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={novaQuantidadeMinima}
+                                    onChange={(e) =>
+                                        setNovaQuantidadeMinima(
+                                            parseInt(e.target.value) || 0,
+                                        )
+                                    }
+                                    className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none"
+                                />
+                                {parseInt(novaQuantidadeMinima) > 0 && (
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                                        Mínimo: {novaQuantidadeMinima} un.
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setNovaQuantidadeMinima(0)}
+                                className="p-3 bg-slate-100 rounded-xl text-slate-500 hover:bg-slate-200 transition"
+                                title="Remover quantidade mínima"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                            {parseInt(novaQuantidadeMinima) === 0
+                                ? "0 = sem quantidade mínima (cliente pode pedir 1 unidade)"
+                                : `O cliente deverá pedir no mínimo ${novaQuantidadeMinima} unidades`}
+                        </p>
                     </div>
 
                     {/* SESSÃO DO CONSTRUTOR DE KITS */}
@@ -865,6 +916,7 @@ export default function AbaCardapio({
                                 p.imagens?.[0] ||
                                 p.imagem ||
                                 "https://placehold.co/400?text=Sem+Foto";
+                            const qtdMinima = p.quantidadeMinima || 0;
 
                             return (
                                 <div
@@ -887,6 +939,12 @@ export default function AbaCardapio({
                                                     Combo
                                                 </div>
                                             )}
+                                            {qtdMinima > 0 && (
+                                                <div className="absolute -top-2 -left-2 bg-amber-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-sm flex items-center gap-1">
+                                                    <Minus size={10} /> Mínimo{" "}
+                                                    {qtdMinima}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex-1 w-full">
@@ -902,6 +960,11 @@ export default function AbaCardapio({
                                                             ? "Ativo"
                                                             : "Pausado"}
                                                     </span>
+                                                    {qtdMinima > 0 && (
+                                                        <span className="text-[10px] px-2.5 py-1 rounded-md font-bold uppercase bg-amber-100 text-amber-700">
+                                                            Min: {qtdMinima}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button

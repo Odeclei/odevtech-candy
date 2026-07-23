@@ -1,3 +1,4 @@
+// src/pages/SuperAdmin.jsx
 import { useState, useEffect } from "react";
 import {
     collection,
@@ -69,6 +70,13 @@ const MODULOS_DISPONIVEIS = [
         label: "Importação de XML (Notas contra CNPJ)",
         preco: 42.0,
         cor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
+    },
+    // ✅ NOVO MÓDULO: EVENTOS E TICKETS PRÉ-PAGO
+    {
+        id: "eventos",
+        label: "Eventos e Tickets (Pré-pago)",
+        preco: 25.0,
+        cor: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
     },
 ];
 
