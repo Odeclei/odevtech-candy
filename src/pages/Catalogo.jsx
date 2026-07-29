@@ -1435,6 +1435,9 @@ import {
     Receipt,
     Layers,
     Search,
+    Truck,
+    MapPin,
+    Loader,
 } from "lucide-react";
 import {
     collection,
@@ -1450,6 +1453,11 @@ import {
 import { db } from "../firebase";
 import { gerarPixCopiaECola } from "../utils/pixUtils";
 import { QRCodeCanvas } from "qrcode.react";
+import {
+    buscarCepBrasilAPI,
+    calcularDistanciaHaversine,
+    calcularFrete,
+} from "../utils/freteUtils";
 
 // ==============================================================
 // 1. COMPONENTE CARROSSEL (mantido)
@@ -1740,6 +1748,12 @@ function usePedido(
     setMostrarModalSucessoMesa,
     setMostrarModalPix,
     setPixPayload,
+    tipoEntrega,
+    taxaEntrega,
+    distanciaKm,
+    enderecoEntrega,
+    foraRaioEntrega,
+    formatarDinheiro,
 ) {
     const [processando, setProcessando] = useState(false);
 
@@ -1772,7 +1786,7 @@ function usePedido(
                 }
             };
 
-            if (item.isKit) {
+            if (item.isKit && item.subitensSelecionados) {
                 for (const sub of item.subitensSelecionados) {
                     const pInfo = produtosDaLoja.find(
                         (p) => p.id === sub.produtoId,
@@ -1902,11 +1916,36 @@ function usePedido(
             setProcessando(false);
             return;
         }
+        if (
+            tipoEntrega === "entrega" &&
+            (!enderecoEntrega ||
+                !enderecoEntrega.cep ||
+                !enderecoEntrega.logradouro ||
+                !enderecoEntrega.numero ||
+                !enderecoEntrega.bairro ||
+                !enderecoEntrega.cidade ||
+                !enderecoEntrega.uf)
+        ) {
+            alert(
+                "Preencha o endereço completo de entrega (CEP, logradouro, número, bairro, cidade e UF).",
+            );
+            setProcessando(false);
+            return;
+        }
+        if (tipoEntrega === "entrega" && foraRaioEntrega) {
+            alert(
+                "Infelizmente não entregamos nesta região. Entre em contato com a loja para negociar o frete.",
+            );
+            setProcessando(false);
+            return;
+        }
+        const valorTotalComFrete =
+            tipoEntrega === "entrega" ? valorTotal + taxaEntrega : valorTotal;
         const percSinal =
             configLoja?.percSinal !== undefined
                 ? Number(configLoja.percSinal)
                 : 50;
-        const valorSinal = (valorTotal * percSinal) / 100;
+        const valorSinal = (valorTotalComFrete * percSinal) / 100;
         if (valorSinal > 0) {
             const pix = gerarPixCopiaECola(
                 configLoja?.chavePix || "000",
@@ -1925,8 +1964,12 @@ function usePedido(
                 endereco: enderecoCliente,
                 dataEntrega: dataEntrega,
                 itens: carrinho,
-                valorTotal,
+                valorTotal: valorTotalComFrete,
                 valorSinal,
+                tipoEntrega,
+                enderecoEntrega,
+                taxaEntrega,
+                distanciaKm,
                 status: valorSinal > 0 ? "aguardando_pix" : "pendente",
                 criadoEm: new Date().toISOString(),
                 temEncomenda: isEncomenda,
@@ -1936,9 +1979,27 @@ function usePedido(
                 setMostrarModalPix(true);
             } else {
                 alert("Pedido enviado com sucesso!");
-                // enviarWhatsAppReal(false) – você pode adicionar depois
                 limparCarrinho();
                 setModalCarrinhoAberto(false);
+                window.open(
+                    `https://wa.me/${configLoja?.whatsapp}?text=${encodeURIComponent(
+                        `🛵 *Novo Pedido - ${configLoja?.nomeExibicao || "Loja"}*\n\n` +
+                        `👤 *Cliente:* ${nomeCliente}\n📱 *WhatsApp:* ${telefoneCliente}\n` +
+                        (cpfCliente ? `📄 *CPF:* ${cpfCliente}\n` : "") +
+                        `\n📋 *Itens:*\n${carrinho.map(i =>
+                            `• ${i.quantidade}x ${i.nome} — ${formatarDinheiro(i.preco * i.quantidade)}` +
+                            (i.isKit && i.subitensSelecionados ? "\n" + i.subitensSelecionados.map(sub => `   ↳ ${sub.quantidade * i.quantidade}x ${sub.nome}`).join("\n") : "")
+                        ).join("\n")}` +
+                        `\n\n💰 *Total:* ${formatarDinheiro(valorTotal + (tipoEntrega === "entrega" ? taxaEntrega : 0))}\n` +
+                        (tipoEntrega === "entrega"
+                            ? `🚚 *Frete:* ${formatarDinheiro(taxaEntrega)}\n📍 ${enderecoEntrega?.logradouro || ""}, ${enderecoEntrega?.numero || ""}${enderecoEntrega?.complemento ? " - " + enderecoEntrega.complemento : ""}\n${enderecoEntrega?.bairro || ""}, ${enderecoEntrega?.cidade || ""} - ${enderecoEntrega?.uf || ""}\nCEP: ${enderecoEntrega?.cep || ""}\n`
+                            : `🛍️ *Retirada no local*\n`
+                        ) +
+                        (dataEntrega ? `\n📅 *Data/Hora:* ${new Date(dataEntrega).toLocaleString("pt-BR")}\n` : "") +
+                        `\n⏳ *Pagamento na entrega/retirada.*`
+                    )}`,
+                    "_blank",
+                );
             }
         } catch (e) {
             console.error(e);
@@ -1963,6 +2024,12 @@ function usePedido(
         setMostrarModalSucessoMesa,
         setMostrarModalPix,
         setPixPayload,
+        tipoEntrega,
+        taxaEntrega,
+        distanciaKm,
+        enderecoEntrega,
+        foraRaioEntrega,
+        formatarDinheiro,
     ]);
 
     return { processando, finalizar };
@@ -2444,6 +2511,29 @@ function ModalCarrinho({
     onFinalizar,
     corPrincipal,
     formatarDinheiro,
+    tipoEntrega,
+    setTipoEntrega,
+    cepCliente,
+    handleCepChange,
+    handleCepBlur,
+    carregandoCep,
+    cepInvalido,
+    logradouroCliente,
+    setLogradouroCliente,
+    numeroCliente,
+    setNumeroCliente,
+    bairroCliente,
+    setBairroCliente,
+    cidadeCliente,
+    setCidadeCliente,
+    ufCliente,
+    setUfCliente,
+    complementoCliente,
+    setComplementoCliente,
+    taxaEntrega,
+    distanciaKm,
+    foraRaioEntrega,
+    configLoja,
 }) {
     if (!isOpen) return null;
 
@@ -2584,16 +2674,40 @@ function ModalCarrinho({
 
                     {carrinho.length > 0 && (
                         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                            {!numeroDaMesa && tipoEntrega === "entrega" && (
+                                <div className="flex justify-between text-sm font-medium text-slate-600">
+                                    <span>Subtotal</span>
+                                    <span>{formatarDinheiro(valorTotal)}</span>
+                                </div>
+                            )}
+                            {!numeroDaMesa && tipoEntrega === "entrega" && (
+                                <div className="flex justify-between text-sm font-medium text-emerald-600">
+                                    <span className="flex items-center gap-1">
+                                        <Truck size={14} /> Frete
+                                    </span>
+                                    <span>{formatarDinheiro(taxaEntrega)}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between font-black text-lg border-b border-slate-100 pb-4 text-slate-800">
-                                <span>Total:</span>
+                                <span>
+                                    {tipoEntrega === "entrega" && !numeroDaMesa
+                                        ? "Total com Frete:"
+                                        : "Total:"}
+                                </span>
                                 <span style={{ color: corPrincipal }}>
-                                    {formatarDinheiro(valorTotal)}
+                                    {formatarDinheiro(
+                                        valorTotal +
+                                            (tipoEntrega === "entrega" &&
+                                            !numeroDaMesa
+                                                ? taxaEntrega
+                                                : 0),
+                                    )}
                                 </span>
                             </div>
                             {!numeroDaMesa ? (
                                 <div className="space-y-3 pt-2">
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
-                                        Dados da Entrega / Retirada
+                                        Dados do Cliente
                                     </p>
                                     <input
                                         type="text"
@@ -2613,15 +2727,215 @@ function ModalCarrinho({
                                         }
                                         className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
                                     />
-                                    <input
-                                        type="text"
-                                        placeholder="Endereço Completo (Opcional)"
-                                        value={enderecoCliente}
-                                        onChange={(e) =>
-                                            setEnderecoCliente(e.target.value)
-                                        }
-                                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
-                                    />
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                                            Tipo de Entrega
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setTipoEntrega("retirada")
+                                                }
+                                                className={`flex-1 p-3 rounded-xl border-2 font-bold text-sm transition-all ${
+                                                    tipoEntrega === "retirada"
+                                                        ? "border-slate-900 bg-slate-900 text-white"
+                                                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
+                                                }`}
+                                            >
+                                                🛍️ Retirada
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setTipoEntrega("entrega")
+                                                }
+                                                className={`flex-1 p-3 rounded-xl border-2 font-bold text-sm transition-all ${
+                                                    tipoEntrega === "entrega"
+                                                        ? "border-slate-900 bg-slate-900 text-white"
+                                                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
+                                                }`}
+                                            >
+                                                🚚 Entrega
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {tipoEntrega === "entrega" && (
+                                        <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                                Endereço de Entrega
+                                            </p>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    placeholder="CEP *"
+                                                    value={cepCliente}
+                                                    onChange={(e) =>
+                                                        handleCepChange(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    onBlur={(e) =>
+                                                        handleCepBlur(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    maxLength={9}
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium pr-10"
+                                                />
+                                                {carregandoCep && (
+                                                    <Loader
+                                                        size={16}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 animate-spin"
+                                                    />
+                                                )}
+                                            </div>
+                                            {cepInvalido && (
+                                                <p className="text-red-500 text-xs font-bold">
+                                                    CEP inválido. Verifique e
+                                                    tente novamente.
+                                                </p>
+                                            )}
+                                            {logradouroCliente && (
+                                                <>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Logradouro *"
+                                                        value={
+                                                            logradouroCliente
+                                                        }
+                                                        onChange={(e) =>
+                                                            setLogradouroCliente(
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                                    />
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Número *"
+                                                            value={
+                                                                numeroCliente
+                                                            }
+                                                            onChange={(e) =>
+                                                                setNumeroCliente(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="col-span-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Complemento"
+                                                            value={
+                                                                complementoCliente
+                                                            }
+                                                            onChange={(e) =>
+                                                                setComplementoCliente(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="col-span-2 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                                        />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Bairro *"
+                                                        value={bairroCliente}
+                                                        onChange={(e) =>
+                                                            setBairroCliente(
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                                    />
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cidade *"
+                                                            value={
+                                                                cidadeCliente
+                                                            }
+                                                            onChange={(e) =>
+                                                                setCidadeCliente(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="col-span-3 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="UF *"
+                                                            value={ufCliente}
+                                                            onChange={(e) =>
+                                                                setUfCliente(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            maxLength={2}
+                                                            className="col-span-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium uppercase text-center"
+                                                        />
+                                                    </div>
+                                                    {carregandoCep ? (
+                                                        <div className="p-3 rounded-xl border bg-slate-50 border-slate-200 text-slate-500 text-sm font-bold">
+                                                            <div className="flex items-center gap-2">
+                                                                <Loader
+                                                                    size={16}
+                                                                    className="animate-spin"
+                                                                />
+                                                                <span>
+                                                                    Calculando
+                                                                    frete...
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ) : foraRaioEntrega ? (
+                                                        <div className="p-3 rounded-xl border bg-amber-50 border-amber-200 text-amber-700 text-sm font-bold">
+                                                            <div className="flex items-start gap-2">
+                                                                <MapPin
+                                                                    size={16}
+                                                                    className="shrink-0 mt-0.5"
+                                                                />
+                                                                <span>
+                                                                    Distância:{" "}
+                                                                    {distanciaKm.toFixed(
+                                                                        1,
+                                                                    )}{" "}
+                                                                    km — O frete
+                                                                    deve ser
+                                                                    negociado
+                                                                    com a loja.
+                                                                    {configLoja?.whatsapp && (
+                                                                        <a
+                                                                            href={`https://wa.me/${configLoja.whatsapp}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="underline font-black ml-1"
+                                                                        >
+                                                                            Fale
+                                                                            conosco
+                                                                        </a>
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ) : distanciaKm > 0 ? (
+                                                        <div className="">
+                                                            {/* <div className="flex items-center gap-2">
+                                                                <Truck size={16} />
+                                                                <span>Frete: {formatarDinheiro(taxaEntrega)} ({distanciaKm.toFixed(1)} km)</span>
+                                                            </div> */}
+                                                        </div>
+                                                    ) : null}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                     <input
                                         type="datetime-local"
                                         value={dataEntrega}
@@ -2687,6 +3001,7 @@ function ModalPix({
     configLoja,
     formatarDinheiro,
     onEnviarWhatsApp,
+    corPrincipal,
 }) {
     if (!isOpen) return null;
     return (
@@ -2801,12 +3116,49 @@ export default function Catalogo() {
     const [dataEntrega, setDataEntrega] = useState("");
     const [cpfCliente, setCpfCliente] = useState("");
     const [enderecoCliente, setEnderecoCliente] = useState("");
+    const [tipoEntrega, setTipoEntrega] = useState("retirada");
+    const [cepCliente, setCepCliente] = useState("");
+    const [logradouroCliente, setLogradouroCliente] = useState("");
+    const [numeroCliente, setNumeroCliente] = useState("");
+    const [bairroCliente, setBairroCliente] = useState("");
+    const [cidadeCliente, setCidadeCliente] = useState("");
+    const [ufCliente, setUfCliente] = useState("");
+    const [complementoCliente, setComplementoCliente] = useState("");
+    const [carregandoCep, setCarregandoCep] = useState(false);
+    const [cepInvalido, setCepInvalido] = useState(false);
+    const [taxaEntrega, setTaxaEntrega] = useState(0);
+    const [distanciaKm, setDistanciaKm] = useState(0);
+    const [foraRaioEntrega, setForaRaioEntrega] = useState(false);
+    const [coordsLoja, setCoordsLoja] = useState(null);
     const [modalCarrinhoAberto, setModalCarrinhoAberto] = useState(false);
     const [pixPayload, setPixPayload] = useState("");
     const [mostrarModalPix, setMostrarModalPix] = useState(false);
     const [mostrarModalSucessoMesa, setMostrarModalSucessoMesa] =
         useState(false);
     const [termoBusca, setTermoBusca] = useState("");
+
+    const carregarCoordsLoja = useCallback(async () => {
+        if (!configLoja?.cep) return null;
+        const dados = await buscarCepBrasilAPI(configLoja.cep);
+        if (dados?.latitude && dados?.longitude) {
+            const coords = { lat: dados.latitude, lng: dados.longitude };
+            setCoordsLoja(coords);
+            return coords;
+        }
+        return null;
+    }, [configLoja?.cep]);
+
+    useEffect(() => {
+        carregarCoordsLoja();
+    }, [carregarCoordsLoja]);
+
+    useEffect(() => {
+        if (tipoEntrega === "retirada") {
+            setTaxaEntrega(0);
+            setDistanciaKm(0);
+            setForaRaioEntrega(false);
+        }
+    }, [tipoEntrega]);
 
     const corPrincipal =
         configLoja?.corPrincipal ||
@@ -2825,6 +3177,71 @@ export default function Catalogo() {
             currency: "BRL",
         }).format(v || 0);
 
+    const handleCepBlur = useCallback(
+        async (cepValue) => {
+            const digitos = (cepValue || "").replace(/\D/g, "");
+            if (digitos.length !== 8) return;
+            setCarregandoCep(true);
+            setCepInvalido(false);
+            const dados = await buscarCepBrasilAPI(cepValue);
+            if (!dados) {
+                setCepInvalido(true);
+                setCarregandoCep(false);
+                return;
+            }
+            setLogradouroCliente(dados.logradouro);
+            setBairroCliente(dados.bairro);
+            setCidadeCliente(dados.cidade);
+            setUfCliente(dados.uf);
+            setCepInvalido(false);
+            let coords = coordsLoja;
+            if (!coords) {
+                coords = await carregarCoordsLoja();
+            }
+            if (coords && dados.latitude && dados.longitude) {
+                const dist = calcularDistanciaHaversine(
+                    coords.lat,
+                    coords.lng,
+                    dados.latitude,
+                    dados.longitude,
+                );
+                setDistanciaKm(dist);
+                const faixas = configLoja?.faixasEntrega || [];
+                const { valor, foraRaio } = calcularFrete(dist, faixas);
+                setTaxaEntrega(valor);
+                setForaRaioEntrega(foraRaio);
+            } else {
+                setTaxaEntrega(0);
+                setDistanciaKm(0);
+                setForaRaioEntrega(false);
+            }
+            setCarregandoCep(false);
+        },
+        [coordsLoja, configLoja?.faixasEntrega, carregarCoordsLoja],
+    );
+
+    const handleCepChange = useCallback((value) => {
+        const digitos = value.replace(/\D/g, "");
+        const formatado = digitos.replace(/^(\d{5})(\d)/, "$1-$2").slice(0, 9);
+        setCepCliente(formatado);
+        if (digitos.length === 8) {
+            setCepInvalido(false);
+        }
+    }, []);
+
+    const enderecoEntrega =
+        tipoEntrega === "entrega"
+            ? {
+                  cep: cepCliente,
+                  logradouro: logradouroCliente,
+                  numero: numeroCliente,
+                  bairro: bairroCliente,
+                  cidade: cidadeCliente,
+                  uf: ufCliente,
+                  complemento: complementoCliente,
+              }
+            : null;
+
     const { processando, finalizar } = usePedido(
         carrinho,
         valorTotal,
@@ -2842,10 +3259,50 @@ export default function Catalogo() {
         setMostrarModalSucessoMesa,
         setMostrarModalPix,
         setPixPayload,
+        tipoEntrega,
+        taxaEntrega,
+        distanciaKm,
+        enderecoEntrega,
+        foraRaioEntrega,
+        formatarDinheiro,
     );
 
     const enviarWhatsApp = () => {
-        // Implementação do envio do WhatsApp (pode usar a lógica anterior)
+        let msg = `🛵 *Novo Pedido - ${configLoja?.nomeExibicao || "Loja"}*\n\n`;
+        msg += `👤 *Cliente:* ${nomeCliente}\n`;
+        msg += `📱 *WhatsApp:* ${telefoneCliente}\n`;
+        if (cpfCliente) msg += `📄 *CPF:* ${cpfCliente}\n`;
+        msg += `\n📋 *Itens:*\n`;
+        carrinho.forEach((i) => {
+            msg += `• ${i.quantidade}x ${i.nome} — ${formatarDinheiro(i.preco * i.quantidade)}\n`;
+            if (i.isKit && i.subitensSelecionados) {
+                i.subitensSelecionados.forEach((sub) => {
+                    msg += `   ↳ ${sub.quantidade * i.quantidade}x ${sub.nome}\n`;
+                });
+            }
+        });
+        msg += `\n💵 *Subtotal:* ${formatarDinheiro(valorTotal)}\n`;
+        if (tipoEntrega === "entrega") {
+            msg += `🚚 *Frete:* ${formatarDinheiro(taxaEntrega)}\n`;
+            msg += `💰 *Total com Frete:* ${formatarDinheiro(valorTotal + taxaEntrega)}\n`;
+            msg += `\n📍 *Endereço de Entrega:*\n`;
+            if (enderecoEntrega) {
+                msg += `${enderecoEntrega.logradouro}, ${enderecoEntrega.numero}`;
+                if (enderecoEntrega.complemento) msg += ` - ${enderecoEntrega.complemento}`;
+                msg += `\n${enderecoEntrega.bairro}, ${enderecoEntrega.cidade} - ${enderecoEntrega.uf}\nCEP: ${enderecoEntrega.cep}\n`;
+            }
+        } else {
+            msg += `💰 *Total:* ${formatarDinheiro(valorTotal)}\n`;
+            msg += `\n🛍️ *Retirada no local*\n`;
+        }
+        if (dataEntrega) {
+            msg += `\n📅 *Data/Hora:* ${new Date(dataEntrega).toLocaleString("pt-BR")}\n`;
+        }
+        msg += `\n✅ *Sinal pago via Pix!*`;
+        window.open(
+            `https://wa.me/${configLoja?.whatsapp}?text=${encodeURIComponent(msg)}`,
+            "_blank",
+        );
         setMostrarModalPix(false);
         setModalCarrinhoAberto(false);
         limparCarrinho();
@@ -2953,6 +3410,29 @@ export default function Catalogo() {
                 onFinalizar={finalizar}
                 corPrincipal={corPrincipal}
                 formatarDinheiro={formatarDinheiro}
+                tipoEntrega={tipoEntrega}
+                setTipoEntrega={setTipoEntrega}
+                cepCliente={cepCliente}
+                handleCepChange={handleCepChange}
+                handleCepBlur={handleCepBlur}
+                carregandoCep={carregandoCep}
+                cepInvalido={cepInvalido}
+                logradouroCliente={logradouroCliente}
+                setLogradouroCliente={setLogradouroCliente}
+                numeroCliente={numeroCliente}
+                setNumeroCliente={setNumeroCliente}
+                bairroCliente={bairroCliente}
+                setBairroCliente={setBairroCliente}
+                cidadeCliente={cidadeCliente}
+                setCidadeCliente={setCidadeCliente}
+                ufCliente={ufCliente}
+                setUfCliente={setUfCliente}
+                complementoCliente={complementoCliente}
+                setComplementoCliente={setComplementoCliente}
+                taxaEntrega={taxaEntrega}
+                distanciaKm={distanciaKm}
+                foraRaioEntrega={foraRaioEntrega}
+                configLoja={configLoja}
             />
 
             <ModalSucessoMesa
@@ -2965,10 +3445,16 @@ export default function Catalogo() {
                 isOpen={mostrarModalPix}
                 onClose={() => setMostrarModalPix(false)}
                 pixPayload={pixPayload}
-                valorSinal={(valorTotal * (configLoja?.percSinal || 50)) / 100}
+                valorSinal={
+                    ((valorTotal +
+                        (tipoEntrega === "entrega" ? taxaEntrega : 0)) *
+                        (configLoja?.percSinal || 50)) /
+                    100
+                }
                 configLoja={configLoja}
                 formatarDinheiro={formatarDinheiro}
                 onEnviarWhatsApp={enviarWhatsApp}
+                corPrincipal={corPrincipal}
             />
 
             {/* Botão flutuante do carrinho (mobile) */}

@@ -17,6 +17,7 @@ export default function CardPedido({
   onAbrirReceita,
   onAbrirEmissao,
   onImprimir,
+  onImprimirPedido,
   onEditarPedido,
   configLoja,
   isFuturo,
@@ -132,12 +133,20 @@ export default function CardPedido({
           </button>
         )}
         {pedido.status === "em_producao" && (
-          <button
-            onClick={() => onStatusChange(pedido.id, "pronto")}
-            className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black shadow-md flex justify-center items-center gap-2"
-          >
-            <CheckCircle size={18} /> Marcar como Pronto
-          </button>
+          <>
+            <button
+              onClick={() => onStatusChange(pedido.id, "pronto")}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black shadow-md flex justify-center items-center gap-2"
+            >
+              <CheckCircle size={18} /> Marcar como Pronto
+            </button>
+            <button
+              onClick={() => onImprimirPedido(pedido)}
+              className="w-full py-2.5 border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-95 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+            >
+              <Printer size={16} /> Imprimir Pedido
+            </button>
+          </>
         )}
         {pedido.status === "pronto" && (
           <>
@@ -188,6 +197,14 @@ export default function CardPedido({
               )}
             </div>
           </>
+        )}
+        {pedido.status === "entregue" && (
+          <button
+            onClick={() => onImprimirPedido(pedido)}
+            className="w-full py-2.5 border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-95 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+          >
+            <Printer size={16} /> Imprimir Pedido
+          </button>
         )}
       </div>
     </div>

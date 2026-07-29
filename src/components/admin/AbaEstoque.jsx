@@ -16,6 +16,8 @@ import {
     Hammer,
     Edit2,
     CheckCircle,
+    Tags,
+    Filter,
 } from "lucide-react";
 import {
     collection,
@@ -59,10 +61,17 @@ export default function AbaEstoque({ nomeDaLoja }) {
     const [novaQtdIngrediente, setNovaQtdIngrediente] = useState("");
     const [salvandoFicha, setSalvandoFicha] = useState(false);
 
+    // Categorias de Insumo
+    const [categoriasInsumo, setCategoriasInsumo] = useState([]);
+    const [filtroCategoria, setFiltroCategoria] = useState("todas");
+    const [modalCategoriaOpen, setModalCategoriaOpen] = useState(false);
+    const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
+
     // Estados de Novo Insumo (AGORA COM CUSTO PLANEJADO)
     const [modalNovoInsumoOpen, setModalNovoInsumoOpen] = useState(false);
     const [novoInsumoNome, setNovoInsumoNome] = useState("");
     const [novoInsumoCusto, setNovoInsumoCusto] = useState("");
+    const [novoInsumoCategoria, setNovoInsumoCategoria] = useState("");
     const [salvandoInsumo, setSalvandoInsumo] = useState(false);
 
     // Estados para Edição de Histórico
@@ -102,11 +111,54 @@ export default function AbaEstoque({ nomeDaLoja }) {
                 );
             },
         );
+        const unCategorias = onSnapshot(
+            query(
+                collection(db, "categoriasInsumo"),
+                where("loja", "==", nomeDaLoja),
+            ),
+            (snap) => {
+                setCategoriasInsumo(
+                    snap.docs.map((d) => ({ id: d.id, nome: d.data().nome })),
+                );
+            },
+        );
         return () => {
             unProdutos();
             unMovi();
+            unCategorias();
         };
     }, [nomeDaLoja]);
+
+    // ==========================================
+    // CRUD CATEGORIAS DE INSUMO
+    // ==========================================
+    const adicionarCategoria = async (e) => {
+        e.preventDefault();
+        if (!novaCategoriaNome.trim()) return;
+        try {
+            await addDoc(collection(db, "categoriasInsumo"), {
+                loja: nomeDaLoja,
+                nome: novaCategoriaNome.trim(),
+            });
+            setNovaCategoriaNome("");
+        } catch (error) {
+            alert("Erro ao adicionar categoria.");
+        }
+    };
+
+    const removerCategoria = async (cat) => {
+        if (
+            !window.confirm(
+                `Remover categoria "${cat.nome}"? Os insumos dessa categoria não serão removidos.`,
+            )
+        )
+            return;
+        try {
+            await deleteDoc(doc(db, "categoriasInsumo", cat.id));
+        } catch (error) {
+            alert("Erro ao remover categoria.");
+        }
+    };
 
     const formatarDinheiro = (v) =>
         new Intl.NumberFormat("pt-BR", {
@@ -128,12 +180,13 @@ export default function AbaEstoque({ nomeDaLoja }) {
                 ativo: false,
                 controlarEstoque: true,
                 estoqueAtual: 0,
-                custoMedio: parseFloat(novoInsumoCusto) || 0, // Custo planejado entra aqui
-                categoria: "Insumos e Matéria Prima",
+                custoMedio: parseFloat(novoInsumoCusto) || 0,
+                categoria: novoInsumoCategoria || "Sem categoria",
                 criadoEm: new Date().toISOString(),
             });
             setNovoInsumoNome("");
             setNovoInsumoCusto("");
+            setNovoInsumoCategoria("");
             setModalNovoInsumoOpen(false);
         } catch (error) {
             alert("Erro ao cadastrar insumo.");
@@ -453,7 +506,7 @@ export default function AbaEstoque({ nomeDaLoja }) {
             {abaAtual === "inventario" && (
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                     <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="relative w-full md:w-96">
+                        <div className="relative w-full md:w-80">
                             <Search
                                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                                 size={20}
@@ -466,12 +519,34 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                             />
                         </div>
-                        <button
-                            onClick={() => setModalNovoInsumoOpen(true)}
-                            className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition active:scale-95 w-full md:w-auto justify-center"
-                        >
-                            <Plus size={18} /> Novo Insumo Bruto
-                        </button>
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <Filter className="text-slate-400 shrink-0" size={18} />
+                            <select
+                                value={filtroCategoria}
+                                onChange={(e) => setFiltroCategoria(e.target.value)}
+                                className="bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-xl outline-none text-sm font-medium text-slate-700"
+                            >
+                                <option value="todas">Todas categorias</option>
+                                {categoriasInsumo.map((cat) => (
+                                    <option key={cat.id} value={cat.nome}>
+                                        {cat.nome}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => setModalCategoriaOpen(true)}
+                                className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                                title="Gerenciar categorias"
+                            >
+                                <Tags size={18} />
+                            </button>
+                            <button
+                                onClick={() => setModalNovoInsumoOpen(true)}
+                                className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition active:scale-95 shrink-0"
+                            >
+                                <Plus size={18} /> Novo Insumo
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -481,6 +556,7 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                         Insumo / Produto
                                     </th>
                                     <th className="p-4 text-center">Tipo</th>
+                                    <th className="p-4 text-center">Categoria</th>
                                     <th className="p-4 text-center">
                                         Stock Atual
                                     </th>
@@ -498,6 +574,11 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                         p.nome
                                             .toLowerCase()
                                             .includes(busca.toLowerCase()),
+                                    )
+                                    .filter(
+                                        (p) =>
+                                            filtroCategoria === "todas" ||
+                                            p.categoria === filtroCategoria,
                                     )
                                     .map((produto) => {
                                         const isRec =
@@ -520,6 +601,11 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                                             INSUMO
                                                         </span>
                                                     )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium">
+                                                        {produto.categoria || "—"}
+                                                    </span>
                                                 </td>
                                                 <td className="p-4 text-center font-black text-lg">
                                                     {produto.estoqueAtual || 0}
@@ -1115,7 +1201,7 @@ export default function AbaEstoque({ nomeDaLoja }) {
                     <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-slate-800">
-                                Cadastrar Insumo Bruto
+                                Cadastrar Insumo
                             </h2>
                             <button
                                 onClick={() => setModalNovoInsumoOpen(false)}
@@ -1142,6 +1228,36 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                     }
                                     className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-amber-400 outline-none"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    Categoria
+                                </label>
+                                <select
+                                    value={novoInsumoCategoria}
+                                    onChange={(e) =>
+                                        setNovoInsumoCategoria(e.target.value)
+                                    }
+                                    className="w-full border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-amber-400 outline-none bg-white"
+                                >
+                                    <option value="">Sem categoria</option>
+                                    {categoriasInsumo.map((cat) => (
+                                        <option key={cat.id} value={cat.nome}>
+                                            {cat.nome}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setModalNovoInsumoOpen(false);
+                                        setModalCategoriaOpen(true);
+                                    }}
+                                    className="text-xs text-amber-600 font-bold mt-1 hover:underline"
+                                >
+                                    + Gerenciar categorias
+                                </button>
                             </div>
 
                             <div>
@@ -1174,6 +1290,69 @@ export default function AbaEstoque({ nomeDaLoja }) {
                                     : "Gravar Insumo e Voltar"}
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {modalCategoriaOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-slate-800">
+                                Gerenciar Categorias
+                            </h2>
+                            <button
+                                onClick={() => setModalCategoriaOpen(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <form
+                            onSubmit={adicionarCategoria}
+                            className="flex gap-2 mb-6"
+                        >
+                            <input
+                                type="text"
+                                required
+                                placeholder="Nova categoria..."
+                                value={novaCategoriaNome}
+                                onChange={(e) =>
+                                    setNovaCategoriaNome(e.target.value)
+                                }
+                                className="flex-1 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-amber-400 outline-none"
+                            />
+                            <button
+                                type="submit"
+                                className="bg-slate-900 text-white px-4 rounded-xl font-bold hover:bg-slate-800 transition"
+                            >
+                                <Plus size={18} />
+                            </button>
+                        </form>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {categoriasInsumo.length === 0 && (
+                                <p className="text-sm text-slate-400 text-center py-4">
+                                    Nenhuma categoria cadastrada ainda.
+                                </p>
+                            )}
+                            {categoriasInsumo.map((cat) => (
+                                <div
+                                    key={cat.id}
+                                    className="flex items-center justify-between bg-slate-50 p-3 rounded-xl"
+                                >
+                                    <span className="font-medium text-slate-700">
+                                        {cat.nome}
+                                    </span>
+                                    <button
+                                        onClick={() => removerCategoria(cat)}
+                                        className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition"
+                                        title="Remover"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

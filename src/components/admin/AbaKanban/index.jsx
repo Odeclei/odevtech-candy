@@ -114,6 +114,123 @@ export default function AbaKanban({ nomeDaLoja, clientesCadastrados = [] }) {
     window.open(url, "_blank");
   };
 
+  const handleImprimirPedido = (pedido) => {
+    const W = 30;
+
+    const fmt = (val) =>
+      `R$${Number(val || 0).toFixed(2).replace(".", ",")}`;
+
+    const padDot = (left, right) => {
+      const dots = Math.max(1, W - left.length - right.length);
+      return left + ".".repeat(dots) + right;
+    };
+
+    const SEP = "─".repeat(W);
+    const SEP2 = "=".repeat(W);
+
+    const formaPgto = pedido.formaPagamento
+      ? pedido.formaPagamento === "dinheiro"
+        ? `Dinheiro${pedido.trocoPara ? ` (troco p/ ${fmt(pedido.trocoPara)})` : ""}`
+        : pedido.formaPagamento === "credito"
+          ? "Cartão Credito"
+          : pedido.formaPagamento === "debito"
+            ? "Cartão Debito"
+            : pedido.formaPagamento
+      : pedido.valorSinal > 0
+        ? "PIX (sinal)"
+        : "Pendente";
+
+    const dataPedido = pedido.criadoEm
+      ? new Date(pedido.criadoEm).toLocaleString("pt-BR")
+      : "";
+    const dataEntrega = pedido.dataEntrega
+      ? new Date(pedido.dataEntrega).toLocaleString("pt-BR")
+      : "";
+
+    const subtotal = pedido.itens.reduce(
+      (a, i) => a + (i.preco || 0) * (i.quantidade || i.qtd_total || 1),
+      0,
+    );
+
+    const itensText = pedido.itens
+      .map((item) => {
+        const q = item.quantidade || item.qtd_total || 1;
+        const total = (item.preco || 0) * q;
+        const line = padDot(`${q}x ${item.nome}`, fmt(total));
+
+        const subs =
+          item.isKit && item.subitensSelecionados?.length > 0
+            ? item.subitensSelecionados
+                .map((sub) => `  ${sub.quantidade * q}x ${sub.nome}`)
+                .join("\n")
+            : "";
+        return subs ? `${line}\n${subs}` : line;
+      })
+      .join("\n");
+
+    const enderecoText =
+      pedido.tipoEntrega === "entrega" && pedido.enderecoEntrega
+        ? `${pedido.enderecoEntrega.logradouro || ""}, ${pedido.enderecoEntrega.numero || ""}${pedido.enderecoEntrega.complemento ? " - " + pedido.enderecoEntrega.complemento : ""}\n${pedido.enderecoEntrega.bairro || ""}, ${pedido.enderecoEntrega.cidade || ""} - ${pedido.enderecoEntrega.uf || ""}\nCEP: ${pedido.enderecoEntrega.cep || ""}`
+        : "Retirada no local";
+
+    const tipoEntregaLabel = pedido.tipoEntrega === "entrega" ? "DELIVERY" : "RETIRADA";
+
+    const distStr =
+      pedido.distanciaKm != null
+        ? `${Number(pedido.distanciaKm).toFixed(1).replace(".", ",")}km`
+        : "";
+    const freteLabel = distStr ? `Frete ${distStr}` : "Frete";
+    const freteText =
+      pedido.tipoEntrega === "entrega" && (pedido.taxaEntrega || pedido.taxaEntrega === 0)
+        ? padDot(freteLabel, fmt(pedido.taxaEntrega))
+        : "";
+
+    const sinalText =
+      pedido.valorSinal > 0
+        ? `\n${padDot("Sinal pago", fmt(pedido.valorSinal))}`
+        : "";
+
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Pedido #${pedido.id?.slice(0, 8) || ""}</title>
+<style>
+  @page { margin:0; size:58mm auto; }
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Courier New',Courier,monospace; }
+  body { width:58mm; margin:0 auto; padding:4mm 2mm; line-height:1.3; color:#000; background:#fff; }
+  .c { text-align:center; }
+  .nome-loja { font-weight:bold; text-transform:uppercase; }
+  .info { margin:2px 0; }
+  .sep { white-space:pre; margin:3px 0; }
+  .pre { white-space:pre; }
+  .footer { text-align:center; margin-top:6px; }
+</style></head><body>
+<div class="c nome-loja">${configLoja?.nomeExibicao || nomeDaLoja || "Loja"}</div>
+<div class="c info">Pedido #${(pedido.id || "").slice(0, 8)}</div>
+<div class="c info">${dataPedido}</div>
+${dataEntrega ? `<div class="c info">Entrega: ${dataEntrega}</div>` : ""}
+<div class="c info" style="font-weight:bold">${tipoEntregaLabel}</div>
+<div class="sep">${SEP}</div>
+<div class="pre">${itensText}</div>
+<div class="sep">${SEP}</div>
+<div class="pre">${padDot("Subtotal", fmt(subtotal))}</div>
+${freteText ? `<div class="pre">${freteText}</div>` : ""}
+<div class="pre" style="font-weight:bold">${padDot("TOTAL", fmt(pedido.valorTotal))}</div>
+${sinalText}
+<div class="sep">${SEP2}</div>
+<div class="info"><b>Cliente:</b> ${pedido.cliente || "—"}</div>
+${pedido.telefone ? `<div class="info"><b>Tel:</b> ${pedido.telefone}</div>` : ""}
+${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
+<div class="info"><b>Pagamento:</b> ${formaPgto}</div>
+<div class="info"><b>Endereco:</b></div>
+<div class="info" style="padding-left:4px">${enderecoText}</div>
+<div class="sep">${SEP2}</div>
+<div class="footer">Obrigado pela preferencia!</div>
+<script>window.onload=function(){window.print();window.close()};</script>
+</body></html>`);
+    printWindow.document.close();
+  };
+
   // A função abrirModalEmissao precisa receber clientesCadastrados
   const handleAbrirEmissao = (pedido) => {
     abrirModalEmissao(pedido, clientesCadastrados);
@@ -163,6 +280,7 @@ export default function AbaKanban({ nomeDaLoja, clientesCadastrados = [] }) {
             onAbrirReceita={abrirReceita}
             onAbrirEmissao={handleAbrirEmissao}
             onImprimir={handleImprimir}
+            onImprimirPedido={handleImprimirPedido}
             onEditarPedido={setPedidoEditando}
             configLoja={configLoja}
           />

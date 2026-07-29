@@ -27,6 +27,9 @@ import {
   TrendingUp,
   Receipt,
   AlertTriangle,
+  Truck,
+  MapPin,
+  Plus,
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
 
@@ -61,6 +64,14 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
     // ✅ NOVO CAMPO: Mensagem Complementar Obrigatória (NF-e/NFC-e)
     // ============================================================
     mensagemComplementar: "",
+    // --- ENTREGA ---
+    faixasEntrega: [
+      { deKm: 0, ateKm: 1, valor: 0 },
+      { deKm: 1, ateKm: 5, valor: 0 },
+      { deKm: 5, ateKm: 10, valor: 0 },
+      { deKm: 10, ateKm: 15, valor: 0 },
+      { deKm: 15, ateKm: 25, valor: 0 },
+    ],
   });
 
   const [imagemArquivo, setImagemArquivo] = useState(null);
@@ -216,7 +227,7 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
   return (
     <div className="max-w-4xl animate-in fade-in duration-300 pb-20">
       {/* NAVEGAÇÃO POR ABAS */}
-      <div className="flex gap-2 border-b border-slate-200 mb-8 pb-px overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 border-b border-slate-200 mb-8 pb-1 overflow-x-auto">
         <button
           onClick={() => setAbaAtual("geral")}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
@@ -258,6 +269,16 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
           <Receipt size={18} className="inline mr-2" /> Fiscal
         </button>
         <button
+          onClick={() => setAbaAtual("entrega")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
+            abaAtual === "entrega"
+              ? "border-slate-900 text-slate-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Truck size={18} className="inline mr-2" /> Entrega
+        </button>
+        <button
           onClick={() => setAbaAtual("equipe")}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
             abaAtual === "equipe"
@@ -270,7 +291,9 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
       </div>
 
       {/* FORMULÁRIO PRINCIPAL (Apanha as primeiras abas de configuração da loja) */}
-      {["geral", "recebimento", "markup", "fiscal"].includes(abaAtual) && (
+      {["geral", "recebimento", "markup", "fiscal", "entrega"].includes(
+        abaAtual,
+      ) && (
         <form onSubmit={salvarConfiguracoes} className="space-y-8">
           {/* ABA GERAL */}
           {abaAtual === "geral" && (
@@ -778,6 +801,81 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
                 />
               </div>
               {/* ============================================================ */}
+            </div>
+          )}
+
+          {/* ABA ENTREGA */}
+          {abaAtual === "entrega" && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+              <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                <Truck className="text-emerald-500" /> Configuração de Entrega
+              </h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Defina o valor do frete por faixa de distância (km). O sistema
+                calcula a distância automaticamente usando o CEP do cliente.
+              </p>
+
+              <div className="space-y-4">
+                {[
+                  { deKm: 0, ateKm: 1, label: "0 a 1 km" },
+                  { deKm: 1, ateKm: 5, label: "1 a 5 km" },
+                  { deKm: 5, ateKm: 10, label: "5 a 10 km" },
+                  { deKm: 10, ateKm: 15, label: "10 a 15 km" },
+                  { deKm: 15, ateKm: 25, label: "15 a 25 km" },
+                ].map((faixa, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200"
+                  >
+                    <MapPin size={20} className="text-slate-400 shrink-0" />
+                    <span className="font-bold text-slate-700 w-28 text-sm">
+                      {faixa.label}
+                    </span>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="0,00"
+                        value={config.faixasEntrega?.[idx]?.valor ?? ""}
+                        onChange={(e) => {
+                          const novas = [...(config.faixasEntrega || [])];
+                          novas[idx] = {
+                            ...novas[idx],
+                            deKm: faixa.deKm,
+                            ateKm: faixa.ateKm,
+                            valor: parseFloat(e.target.value) || 0,
+                          };
+                          setConfig({ ...config, faixasEntrega: novas });
+                        }}
+                        className="w-full border border-slate-200 p-3.5 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-bold text-lg"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
+                        R$
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    size={20}
+                    className="text-amber-600 shrink-0 mt-0.5"
+                  />
+                  <div>
+                    <p className="font-bold text-amber-800 text-sm">
+                      Acima de 25 km
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Para distâncias acima de 25 km, o sistema informará ao
+                      cliente que o frete deve ser negociado diretamente com a
+                      loja pelo WhatsApp.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

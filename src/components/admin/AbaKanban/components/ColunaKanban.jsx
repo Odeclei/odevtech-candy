@@ -14,6 +14,7 @@ export default function ColunaKanban({
   onAbrirReceita,
   onAbrirEmissao,
   onImprimir,
+  onImprimirPedido,
   onEditarPedido,
   configLoja,
 }) {
@@ -36,6 +37,7 @@ export default function ColunaKanban({
             onAbrirReceita={onAbrirReceita}
             onAbrirEmissao={onAbrirEmissao}
             onImprimir={onImprimir}
+            onImprimirPedido={onImprimirPedido}
             onEditarPedido={onEditarPedido}
             configLoja={configLoja}
             isFuturo={!deveAparecerNaCozinhaHoje(pedido.dataEntrega)}

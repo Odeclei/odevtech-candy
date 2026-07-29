@@ -687,6 +687,7 @@ export default function PainelAdmin() {
                                 pedidos={pedidos}
                                 formatarDinheiro={formatarDinheiro}
                                 lojaId={nomeDaLoja}
+                                configLoja={configLoja}
                             />
                         )}
                         {abaAtiva === "financeiro" && (

@@ -20,10 +20,13 @@ export default function AbaHistorico({
   pedidos,
   formatarDinheiro,
   lojaId = "crisdoces",
+  configLoja,
   onPedidoAtualizado, // função opcional para recarregar a lista
 }) {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
   const [pedidoEditando, setPedidoEditando] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -35,55 +38,120 @@ export default function AbaHistorico({
   // FUNÇÃO DE IMPRESSÃO 58mm (Reimpressão)
   // ==========================================
   const imprimirComanda = (pedido) => {
-    const itensHtml = pedido.itens
-      .map(
-        (item) => `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span>${item.quantidade}x ${item.nome}</span>
-            </div>
-        `,
-      )
-      .join("");
+    const W = 30;
 
-    const html = `
-            <html>
-            <head>
-                <title>Comanda - ${pedido.cliente}</title>
-                <style>
-                    @page { margin: 0; }
-                    body { font-family: 'Courier New', Courier, monospace; width: 58mm; margin: 0; padding: 2mm; font-size: 12px; color: #000; }
-                    h2 { font-size: 14px; text-align: center; margin: 0 0 5px 0; }
-                    .divisor { border-top: 1px dashed #000; margin: 5px 0; }
-                    .info { margin-bottom: 5px; }
-                    .bold { font-weight: bold; }
-                    .footer { text-align: center; font-size: 10px; margin-top: 10px; }
-                </style>
-            </head>
-            <body>
-                <h2>REIMPRESSAO</h2>
-                <div class="divisor"></div>
-                <div class="info">
-                    <span class="bold">Cliente:</span> ${pedido.cliente}<br>
-                    <span class="bold">Pedido:</span> #${pedido.id.substring(0, 6).toUpperCase()}<br>
-                    ${pedido.dataEntrega ? `<span class="bold">Entrega:</span> ${new Date(pedido.dataEntrega).toLocaleString("pt-BR")}<br>` : ""}
-                </div>
-                <div class="divisor"></div>
-                <div class="bold" style="margin-bottom: 5px;">ITENS DO PEDIDO:</div>
-                ${itensHtml}
-                <div class="divisor"></div>
-                <div class="footer">OdevTech DoceApp</div>
-            </body>
-            </html>
-        `;
+    const fmt = (val) =>
+      `R$${Number(val || 0).toFixed(2).replace(".", ",")}`;
 
-    const janelaPrint = window.open("", "", "width=300,height=600");
-    janelaPrint.document.write(html);
-    janelaPrint.document.close();
-    janelaPrint.focus();
-    setTimeout(() => {
-      janelaPrint.print();
-      janelaPrint.close();
-    }, 250);
+    const padDot = (left, right) => {
+      const dots = Math.max(1, W - left.length - right.length);
+      return left + ".".repeat(dots) + right;
+    };
+
+    const SEP = "─".repeat(W);
+    const SEP2 = "=".repeat(W);
+
+    const formaPgto = pedido.formaPagamento
+      ? pedido.formaPagamento === "dinheiro"
+        ? `Dinheiro${pedido.trocoPara ? ` (troco p/ ${fmt(pedido.trocoPara)})` : ""}`
+        : pedido.formaPagamento === "credito"
+          ? "Cartao Credito"
+          : pedido.formaPagamento === "debito"
+            ? "Cartao Debito"
+            : pedido.formaPagamento
+      : pedido.valorSinal > 0
+        ? "PIX (sinal)"
+        : "Pendente";
+
+    const dataPedido = pedido.criadoEm
+      ? new Date(pedido.criadoEm).toLocaleString("pt-BR")
+      : "";
+    const dataEntrega = pedido.dataEntrega
+      ? new Date(pedido.dataEntrega).toLocaleString("pt-BR")
+      : "";
+
+    const subtotal = pedido.itens.reduce(
+      (a, i) => a + (i.preco || 0) * (i.quantidade || i.qtd_total || 1),
+      0,
+    );
+
+    const itensText = pedido.itens
+      .map((item) => {
+        const q = item.quantidade || item.qtd_total || 1;
+        const total = (item.preco || 0) * q;
+        const line = padDot(`${q}x ${item.nome}`, fmt(total));
+
+        const subs =
+          item.isKit && item.subitensSelecionados?.length > 0
+            ? item.subitensSelecionados
+                .map((sub) => `  ${sub.quantidade * q}x ${sub.nome}`)
+                .join("\n")
+            : "";
+        return subs ? `${line}\n${subs}` : line;
+      })
+      .join("\n");
+
+    const enderecoText =
+      pedido.tipoEntrega === "entrega" && pedido.enderecoEntrega
+        ? `${pedido.enderecoEntrega.logradouro || ""}, ${pedido.enderecoEntrega.numero || ""}${pedido.enderecoEntrega.complemento ? " - " + pedido.enderecoEntrega.complemento : ""}\n${pedido.enderecoEntrega.bairro || ""}, ${pedido.enderecoEntrega.cidade || ""} - ${pedido.enderecoEntrega.uf || ""}\nCEP: ${pedido.enderecoEntrega.cep || ""}`
+        : "Retirada no local";
+
+    const tipoEntregaLabel = pedido.tipoEntrega === "entrega" ? "DELIVERY" : "RETIRADA";
+
+    const distStr =
+      pedido.distanciaKm != null
+        ? `${Number(pedido.distanciaKm).toFixed(1).replace(".", ",")}km`
+        : "";
+    const freteLabel = distStr ? `Frete ${distStr}` : "Frete";
+    const freteText =
+      pedido.tipoEntrega === "entrega" && (pedido.taxaEntrega || pedido.taxaEntrega === 0)
+        ? padDot(freteLabel, fmt(pedido.taxaEntrega))
+        : "";
+
+    const sinalText =
+      pedido.valorSinal > 0
+        ? `\n${padDot("Sinal pago", fmt(pedido.valorSinal))}`
+        : "";
+
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Pedido #${pedido.id?.slice(0, 8) || ""}</title>
+<style>
+  @page { margin:0; size:58mm auto; }
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Courier New',Courier,monospace; }
+  body { width:58mm; margin:0 auto; padding:4mm 2mm; line-height:1.3; color:#000; background:#fff; }
+  .c { text-align:center; }
+  .nome-loja { font-weight:bold; text-transform:uppercase; }
+  .info { margin:2px 0; }
+  .sep { white-space:pre; margin:3px 0; }
+  .pre { white-space:pre; }
+  .footer { text-align:center; margin-top:6px; }
+</style></head><body>
+<div class="c nome-loja">${configLoja?.nomeExibicao || lojaId || "Loja"}</div>
+<div class="c info">Pedido #${(pedido.id || "").slice(0, 8)}</div>
+<div class="c info">${dataPedido}</div>
+${dataEntrega ? `<div class="c info">Entrega: ${dataEntrega}</div>` : ""}
+<div class="c info" style="font-weight:bold">${tipoEntregaLabel}</div>
+<div class="sep">${SEP}</div>
+<div class="pre">${itensText}</div>
+<div class="sep">${SEP}</div>
+<div class="pre">${padDot("Subtotal", fmt(subtotal))}</div>
+${freteText ? `<div class="pre">${freteText}</div>` : ""}
+<div class="pre" style="font-weight:bold">${padDot("TOTAL", fmt(pedido.valorTotal))}</div>
+${sinalText}
+<div class="sep">${SEP2}</div>
+<div class="info"><b>Cliente:</b> ${pedido.cliente || "—"}</div>
+${pedido.telefone ? `<div class="info"><b>Tel:</b> ${pedido.telefone}</div>` : ""}
+${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
+<div class="info"><b>Pagamento:</b> ${formaPgto}</div>
+<div class="info"><b>Endereco:</b></div>
+<div class="info" style="padding-left:4px">${enderecoText}</div>
+<div class="sep">${SEP2}</div>
+<div class="footer">Obrigado pela preferencia!</div>
+<script>window.onload=function(){window.print();window.close()};</script>
+</body></html>`);
+    printWindow.document.close();
   };
 
   // ==========================================
@@ -434,7 +502,21 @@ export default function AbaHistorico({
         p.cliente?.toLowerCase().includes(busca.toLowerCase()) ||
         p.id?.toLowerCase().includes(busca.toLowerCase());
       const matchStatus = filtroStatus === "todos" || p.status === filtroStatus;
-      return matchBusca && matchStatus;
+      if (!matchBusca || !matchStatus) return false;
+
+      if (dataInicio || dataFim) {
+        const dataPedido = new Date(p.criadoEm);
+        dataPedido.setHours(0, 0, 0, 0);
+        if (dataInicio) {
+          const inicio = new Date(dataInicio + "T00:00:00");
+          if (dataPedido < inicio) return false;
+        }
+        if (dataFim) {
+          const fim = new Date(dataFim + "T23:59:59");
+          if (dataPedido > fim) return false;
+        }
+      }
+      return true;
     })
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
 
@@ -482,7 +564,34 @@ export default function AbaHistorico({
           />
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="text-slate-400" size={20} />
+          <Calendar className="text-slate-400" size={18} />
+          <input
+            type="date"
+            value={dataInicio}
+            onChange={(e) => setDataInicio(e.target.value)}
+            className="bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl outline-none focus:ring-2 focus:ring-pink-400 text-sm text-slate-700"
+            title="Data inicial"
+          />
+          <span className="text-slate-300 text-sm">ate</span>
+          <input
+            type="date"
+            value={dataFim}
+            onChange={(e) => setDataFim(e.target.value)}
+            className="bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl outline-none focus:ring-2 focus:ring-pink-400 text-sm text-slate-700"
+            title="Data final"
+          />
+          {(dataInicio || dataFim) && (
+            <button
+              onClick={() => { setDataInicio(""); setDataFim(""); }}
+              className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition"
+              title="Limpar datas"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Filter className="text-slate-400 shrink-0" size={20} />
           <select
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
