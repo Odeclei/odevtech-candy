@@ -1,6 +1,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const axios = require("axios");
+const crypto = require("crypto");
 
 admin.initializeApp();
 
@@ -43,7 +44,7 @@ exports.emitirNFCe = functions.https.onCall(async (data, context) => {
         const lojaData = lojaDoc.data();
 
         // 4. Definir ambiente (homologação ou produção)
-        const ambiente = lojaData.ambiente || "homologacao";
+        const ambiente = lojaData.focusAmbiente || "homologacao";
         const baseUrl =
             ambiente === "producao"
                 ? "https://api.focusnfe.com.br/v2"
@@ -92,7 +93,7 @@ exports.emitirNFCe = functions.https.onCall(async (data, context) => {
         }
 
         // 6. Gerar referência única
-        const refUnica = `PED-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+        const refUnica = `PED-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 
         // 7. Montar URL e cabeçalhos
         const url = `${baseUrl}/nfce?ref=${refUnica}&completa=1`;
@@ -377,7 +378,7 @@ exports.emitirNFe = functions.https.onCall(async (data, context) => {
         const payloadFinal = { ...payloadNFe, ...emitente };
 
         // Gerar referência única
-        const refUnica = `NFE-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+        const refUnica = `NFE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
         const url = `${baseUrl}/nfe?ref=${refUnica}`;
         const auth = Buffer.from(`${token}:`).toString("base64");
         const getBrasiliaISOString = () => {
@@ -671,5 +672,91 @@ exports.webhookReceiver = functions.https.onRequest(async (req, res) => {
     } catch (error) {
         console.error("❌ Erro ao processar webhook:", error);
         res.status(500).send("Erro interno");
+    }
+});
+
+// ==========================================
+// CUSTOM CLAIMS — Super Admin
+// ==========================================
+// Define (ou remove) o cargo de super admin via Custom Claim.
+// Bootstrap: se nenhum super admin foi inicializado ainda (doc _admin/adminConfig),
+// qualquer utilizador autenticado pode promover-se. Depois, só super admins podem.
+// ==========================================
+exports.atribuirSuperAdmin = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "Usuário não autenticado.",
+        );
+    }
+
+    const { email, remover } = (data && data.data) || {};
+    if (!email) {
+        throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Email é obrigatório.",
+        );
+    }
+
+    try {
+        const adminConfigRef = admin.firestore().doc("_admin/adminConfig");
+        const adminConfigSnap = await adminConfigRef.get();
+        const isInitialized =
+            adminConfigSnap.exists &&
+            adminConfigSnap.data().superAdminInicializado;
+
+        const callerUid = context.auth.uid;
+
+        // Bootstrap: primeiro super admin
+        if (!isInitialized) {
+            const targetUser = await admin.auth().getUserByEmail(email);
+            if (targetUser.uid !== callerUid) {
+                throw new functions.https.HttpsError(
+                    "permission-denied",
+                    "Primeira inicialização: você só pode definir seu próprio email como super admin.",
+                );
+            }
+            await admin
+                .auth()
+                .setCustomUserClaims(targetUser.uid, { superAdmin: true });
+            await adminConfigRef.set({
+                superAdminInicializado: true,
+                email,
+                criadoEm: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return {
+                sucesso: true,
+                mensagem: "Super admin inicializado com sucesso.",
+            };
+        }
+
+        // Demais chamadas: só super admins podem atribuir
+        const callerToken = await admin.auth().getUser(callerUid);
+        if (!callerToken.customClaims || !callerToken.customClaims.superAdmin) {
+            throw new functions.https.HttpsError(
+                "permission-denied",
+                "Apenas super administradores podem atribuir este cargo.",
+            );
+        }
+
+        const targetUser = await admin.auth().getUserByEmail(email);
+        const claims = targetUser.customClaims || {};
+
+        if (remover) {
+            delete claims.superAdmin;
+            await admin.auth().setCustomUserClaims(targetUser.uid, claims);
+            return {
+                sucesso: true,
+                mensagem: `Super admin removido de ${email}.`,
+            };
+        }
+
+        claims.superAdmin = true;
+        await admin.auth().setCustomUserClaims(targetUser.uid, claims);
+        return { sucesso: true, mensagem: `Super admin atribuído a ${email}.` };
+    } catch (err) {
+        if (err instanceof functions.https.HttpsError) throw err;
+        console.error("❌ ERRO atribuirSuperAdmin:", err);
+        throw new functions.https.HttpsError("internal", err.message);
     }
 });

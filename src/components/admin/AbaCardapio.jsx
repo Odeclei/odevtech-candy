@@ -235,7 +235,12 @@ export default function AbaCardapio({
             let urlsDasFotos = [...produtoImagensAtuais];
 
             if (imagensArquivos.length > 0) {
-                const uploadPromises = Array.from(imagensArquivos).map(
+                const vagasDisponiveis = 4 - urlsDasFotos.length;
+                const arquivosParaUpload = Array.from(imagensArquivos).slice(
+                    0,
+                    vagasDisponiveis,
+                );
+                const uploadPromises = arquivosParaUpload.map(
                     async (arquivo) => {
                         const imagemComprimida = await imageCompression(
                             arquivo,
@@ -356,6 +361,14 @@ export default function AbaCardapio({
         setKitGroups([]);
         // ✅ Resetar quantidade mínima
         setNovaQuantidadeMinima(0);
+    };
+
+    const removerImagem = (index) => {
+        setProdutoImagensAtuais((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const removerArquivoImagem = (index) => {
+        setImagensArquivos((prev) => prev.filter((_, i) => i !== index));
     };
 
     const apagarProduto = async (id) => {
@@ -788,37 +801,80 @@ export default function AbaCardapio({
                     <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1 flex justify-between">
                             <span>Fotos (Até 4 imagens)</span>
+                            <span className="text-xs text-slate-400">
+                                {produtoImagensAtuais.length + imagensArquivos.length}/4
+                            </span>
                         </label>
                         <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 space-y-3">
-                            <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={(e) =>
-                                    setImagensArquivos(
-                                        Array.from(e.target.files).slice(0, 4),
-                                    )
-                                }
-                                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
-                            />
-                            {editandoProdutoId &&
-                                produtoImagensAtuais.length > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto">
-                                        {produtoImagensAtuais.map(
-                                            (imgUrl, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="relative w-12 h-12 shrink-0"
+                            {(produtoImagensAtuais.length + imagensArquivos.length) < 4 && (
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => {
+                                        const total = produtoImagensAtuais.length + imagensArquivos.length;
+                                        const vagas = 4 - total;
+                                        setImagensArquivos(
+                                            Array.from(e.target.files).slice(0, vagas),
+                                        );
+                                    }}
+                                    className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
+                                />
+                            )}
+                            {produtoImagensAtuais.length > 0 && (
+                                <div className="flex gap-2 flex-wrap">
+                                    {produtoImagensAtuais.map(
+                                        (imgUrl, i) => (
+                                            <div
+                                                key={i}
+                                                className="relative w-16 h-16 shrink-0 group"
+                                            >
+                                                <img
+                                                    src={imgUrl}
+                                                    className="w-full h-full object-cover rounded-lg border border-slate-300"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        removerImagem(i)
+                                                    }
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Remover imagem"
                                                 >
-                                                    <img
-                                                        src={imgUrl}
-                                                        className="w-full h-full object-cover rounded-lg border border-slate-300"
-                                                    />
-                                                </div>
-                                            ),
-                                        )}
-                                    </div>
-                                )}
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ),
+                                    )}
+                                </div>
+                            )}
+                            {imagensArquivos.length > 0 && (
+                                <div className="flex gap-2 flex-wrap">
+                                    {Array.from(imagensArquivos).map(
+                                        (arquivo, i) => (
+                                            <div
+                                                key={i}
+                                                className="relative w-16 h-16 shrink-0 group"
+                                            >
+                                                <img
+                                                    src={URL.createObjectURL(arquivo)}
+                                                    className="w-full h-full object-cover rounded-lg border border-slate-300"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        removerArquivoImagem(i)
+                                                    }
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Remover imagem"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ),
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 

@@ -27,6 +27,7 @@ import {
 import { db } from "../../firebase";
 import { focusNFeService } from "../../services/focusNFeService";
 import { gerarPayloadNFCe } from "../../utils/fiscalUtils";
+import { escapeHtml } from "../../utils/sanitize";
 
 export default function AbaCaixaBar({ nomeDaLoja }) {
     const [busca, setBusca] = useState("");
@@ -266,11 +267,12 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
     const imprimirComanda = (comanda) => {
         const totais = calcularTotaisComanda(comanda);
         const janelaImpressao = window.open("", "", "width=300,height=600");
+        const eh = escapeHtml;
 
         let htmlCupom = `
             <html>
             <head>
-                <title>Cupom - ${comanda.identificador}</title>
+                <title>Cupom - ${eh(comanda.identificador)}</title>
                 <style>
                     body {
                         font-family: 'Courier New', Courier, monospace;
@@ -294,13 +296,13 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
             </head>
             <body>
                 <div class="center">
-                    <h2>${nomeDaLoja.toUpperCase()}</h2>
+                    <h2>${eh(nomeDaLoja.toUpperCase())}</h2>
                     <small>Documento de Conferência de Mesa</small>
                 </div>
                 <hr/>
-                <h3 class="center">${comanda.identificador.toUpperCase()}</h3>
+                <h3 class="center">${eh(comanda.identificador.toUpperCase())}</h3>
                 <div style="margin-bottom: 10px; margin-top: 5px;">
-                    Cliente: ${comanda.cliente || "Consumidor Salão"} <br/>
+                    Cliente: ${eh(comanda.cliente) || "Consumidor Salão"} <br/>
                     Abertura: ${comanda.abertaEm ? new Date(comanda.abertaEm).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR")}
                 </div>
                 <hr/>
@@ -315,7 +317,7 @@ export default function AbaCaixaBar({ nomeDaLoja }) {
         (comanda.itens || []).forEach((item) => {
             htmlCupom += `
                 <div class="flex-between" style="margin-bottom: 4px;">
-                    <span>${item.qtd_total}x ${item.nome}</span>
+                    <span>${item.qtd_total}x ${eh(item.nome)}</span>
                     <span>${formatarDinheiro(item.preco * item.qtd_total)}</span>
                 </div>
             `;

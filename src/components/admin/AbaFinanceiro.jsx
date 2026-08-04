@@ -621,6 +621,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import { escapeHtml } from "../../utils/sanitize";
 
 export default function AbaFinanceiro({
   nomeDaLoja,
@@ -855,13 +856,14 @@ export default function AbaFinanceiro({
   // ==========================================
   const exportarRelatorioPDF = () => {
     const janelaImpressao = window.open("", "", "width=850,height=900");
+    const eh = escapeHtml;
 
     let linhasTabela = transacoesDaCategoria
       .map(
         (t) => `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${t.data.split("-").reverse().join("/")}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${t.descricao}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${eh(t.descricao)}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; font-size: 11px;">
           <span style="padding: 4px 8px; rounded: 4px; font-weight: bold; background-color: ${t.tipo === "receita" ? "#ecfdf5" : "#fef2f2"}; color: ${t.tipo === "receita" ? "#065f46" : "#991b1b"};">
             ${t.tipo}
@@ -882,7 +884,7 @@ export default function AbaFinanceiro({
     let htmlRelatorio = `
       <html>
       <head>
-        <title>Relatório Financeiro - ${categoriaSelecionada}</title>
+        <title>Relatório Financeiro - ${eh(categoriaSelecionada)}</title>
         <style>
           body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 20mm; color: #1e293b; bg-color: #fff; }
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0f172a; padding-bottom: 15px; margin-bottom: 30px; }
@@ -905,7 +907,7 @@ export default function AbaFinanceiro({
         </div>
 
         <div class="meta-box">
-          <div class="meta-item">Categoria Analisada:< br/><strong>${categoriaSelecionada}</strong></div>
+          <div class="meta-item">Categoria Analisada:< br/><strong>${eh(categoriaSelecionada)}</strong></div>
           <div class="meta-item">Competência:< br/><strong>${mesesDoAno[mesFiltro]} / ${anoFiltro}</strong></div>
           <div class="meta-item">Registros Localizados:< br/><strong>${transacoesDaCategoria.length} itens</strong></div>
         </div>

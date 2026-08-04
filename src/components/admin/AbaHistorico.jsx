@@ -15,6 +15,7 @@ import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { focusNFeService } from "../../services/focusNFeService";
 import { gerarPayloadNFCe } from "../../utils/fiscalUtils";
+import { escapeHtml } from "../../utils/sanitize";
 
 export default function AbaHistorico({
   pedidos,
@@ -75,25 +76,28 @@ export default function AbaHistorico({
       0,
     );
 
+    const eh = escapeHtml;
+
     const itensText = pedido.itens
       .map((item) => {
         const q = item.quantidade || item.qtd_total || 1;
         const total = (item.preco || 0) * q;
-        const line = padDot(`${q}x ${item.nome}`, fmt(total));
+        const line = padDot(`${q}x ${eh(item.nome)}`, fmt(total));
 
         const subs =
           item.isKit && item.subitensSelecionados?.length > 0
             ? item.subitensSelecionados
-                .map((sub) => `  ${sub.quantidade * q}x ${sub.nome}`)
+                .map((sub) => `  ${sub.quantidade * q}x ${eh(sub.nome)}`)
                 .join("\n")
             : "";
         return subs ? `${line}\n${subs}` : line;
       })
       .join("\n");
 
+    const endTexto = (v) => eh(v || "");
     const enderecoText =
       pedido.tipoEntrega === "entrega" && pedido.enderecoEntrega
-        ? `${pedido.enderecoEntrega.logradouro || ""}, ${pedido.enderecoEntrega.numero || ""}${pedido.enderecoEntrega.complemento ? " - " + pedido.enderecoEntrega.complemento : ""}\n${pedido.enderecoEntrega.bairro || ""}, ${pedido.enderecoEntrega.cidade || ""} - ${pedido.enderecoEntrega.uf || ""}\nCEP: ${pedido.enderecoEntrega.cep || ""}`
+        ? `${endTexto(pedido.enderecoEntrega.logradouro)}, ${endTexto(pedido.enderecoEntrega.numero)}${pedido.enderecoEntrega.complemento ? " - " + endTexto(pedido.enderecoEntrega.complemento) : ""}\n${endTexto(pedido.enderecoEntrega.bairro)}, ${endTexto(pedido.enderecoEntrega.cidade)} - ${endTexto(pedido.enderecoEntrega.uf)}\nCEP: ${endTexto(pedido.enderecoEntrega.cep)}`
         : "Retirada no local";
 
     const tipoEntregaLabel = pedido.tipoEntrega === "entrega" ? "DELIVERY" : "RETIRADA";
@@ -128,11 +132,11 @@ export default function AbaHistorico({
   .pre { white-space:pre; }
   .footer { text-align:center; margin-top:6px; }
 </style></head><body>
-<div class="c nome-loja">${configLoja?.nomeExibicao || lojaId || "Loja"}</div>
-<div class="c info">Pedido #${(pedido.id || "").slice(0, 8)}</div>
-<div class="c info">${dataPedido}</div>
-${dataEntrega ? `<div class="c info">Entrega: ${dataEntrega}</div>` : ""}
-<div class="c info" style="font-weight:bold">${tipoEntregaLabel}</div>
+<div class="c nome-loja">${eh(configLoja?.nomeExibicao || lojaId || "Loja")}</div>
+<div class="c info">Pedido #${eh((pedido.id || "").slice(0, 8))}</div>
+<div class="c info">${eh(dataPedido)}</div>
+${dataEntrega ? `<div class="c info">Entrega: ${eh(dataEntrega)}</div>` : ""}
+<div class="c info" style="font-weight:bold">${eh(tipoEntregaLabel)}</div>
 <div class="sep">${SEP}</div>
 <div class="pre">${itensText}</div>
 <div class="sep">${SEP}</div>
@@ -141,12 +145,12 @@ ${freteText ? `<div class="pre">${freteText}</div>` : ""}
 <div class="pre" style="font-weight:bold">${padDot("TOTAL", fmt(pedido.valorTotal))}</div>
 ${sinalText}
 <div class="sep">${SEP2}</div>
-<div class="info"><b>Cliente:</b> ${pedido.cliente || "—"}</div>
-${pedido.telefone ? `<div class="info"><b>Tel:</b> ${pedido.telefone}</div>` : ""}
-${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
-<div class="info"><b>Pagamento:</b> ${formaPgto}</div>
+<div class="info"><b>Cliente:</b> ${eh(pedido.cliente || "—")}</div>
+${pedido.telefone ? `<div class="info"><b>Tel:</b> ${eh(pedido.telefone)}</div>` : ""}
+${pedido.cpf ? `<div class="info"><b>CPF:</b> ${eh(pedido.cpf)}</div>` : ""}
+<div class="info"><b>Pagamento:</b> ${eh(formaPgto)}</div>
 <div class="info"><b>Endereco:</b></div>
-<div class="info" style="padding-left:4px">${enderecoText}</div>
+<div class="info" style="padding-left:4px">${eh(enderecoText)}</div>
 <div class="sep">${SEP2}</div>
 <div class="footer">Obrigado pela preferencia!</div>
 <script>window.onload=function(){window.print();window.close()};</script>
@@ -183,41 +187,23 @@ ${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
   // ==========================================
 
   const emitirNFCeDoPedido = async (pedido) => {
-    console.log("🚀 [1] Função iniciada para pedido:", pedido.id);
     setEmitindoNF(pedido.id);
     try {
-      console.log("🚀 [2] Montando payload...");
       const cpf = pedido.cpf || "";
       const payload = gerarPayloadNFCe(pedido, null, cpf);
-      console.log("🚀 [3] Payload montado:", payload);
-
-      console.log("🚀 [4] Chamando focusNFeService.emitirNFCe...");
       const result = await focusNFeService.emitirNFCe(lojaId, payload);
-      console.log("🚀 [5] Retorno da chamada (result):", result);
-      console.log("🚀 [6] Tipo de result:", typeof result);
-      console.log("🚀 [7] JSON do result:", JSON.stringify(result, null, 2));
 
-      // Se não tiver sucesso
       if (!result || !result.sucesso) {
-        console.warn("🚀 [8] Resultado sem sucesso:", result);
         alert("Erro na emissão: " + (result?.mensagem || "Sem detalhes"));
         return;
       }
 
-      console.log("🚀 [9] Extraindo dadosFocus...");
       const dados = result.dadosFocus || {};
-      console.log("🚀 [10] dadosFocus recebido:", dados);
-      console.log("🚀 [11] Campos disponíveis:", Object.keys(dados));
-
       const chave =
         dados.chave_nfe || dados.chave || dados.chave_acesso || null;
       const xmlUrl = dados.caminho_xml_nota_fiscal || dados.xml_url || null;
       const danfeUrl = dados.caminho_danfe || dados.danfe_url || null;
       const status = dados.status || "desconhecido";
-
-      console.log("🚀 [12] Chave extraída:", chave);
-      console.log("🚀 [13] DANFE URL:", danfeUrl);
-      console.log("🚀 [14] Status:", status);
 
       if (status !== "autorizado") {
         const mensagem = dados.mensagem_sefaz || "Nota não autorizada";
@@ -228,12 +214,10 @@ ${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
       }
 
       if (!chave) {
-        console.warn("🚀 [15] Chave não veio!");
         alert("Nota autorizada, mas chave não retornada.");
         return;
       }
 
-      console.log("🚀 [16] Montando updateData...");
       const updateData = {
         nfceChave: chave,
         nfceEmitidaEm: new Date().toISOString(),
@@ -242,28 +226,21 @@ ${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
       };
       if (xmlUrl) updateData.nfceXml = xmlUrl;
       if (danfeUrl) updateData.nfceDanfe = danfeUrl;
-      console.log("🚀 [17] updateData:", updateData);
 
-      console.log("🚀 [18] Verificando existência do documento...");
       const docRef = doc(db, "pedidos", pedido.id);
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) {
-        console.error("🚀 [19] Documento não encontrado!");
         alert("Pedido não encontrado no banco de dados.");
         return;
       }
-      console.log("🚀 [20] Documento existe, atualizando...");
       await updateDoc(docRef, updateData);
-      console.log("🚀 [21] UpdateDoc concluído!");
 
       alert(`NFC-e emitida com sucesso!\nChave: ${chave}`);
       if (danfeUrl) window.open(danfeUrl, "_blank");
       if (onPedidoAtualizado) onPedidoAtualizado();
     } catch (error) {
-      console.error("🚀 [ERRO] Capturado no catch:", error);
       alert("Erro na emissão: " + (error.message || "Erro desconhecido"));
     } finally {
-      console.log("🚀 [22] Finalizando, emitindoNF = null");
       setEmitindoNF(null);
     }
   };

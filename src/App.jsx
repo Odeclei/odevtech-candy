@@ -31,21 +31,30 @@ const RotaProtegida = ({ children }) => {
     const [carregando, setCarregando] = useState(true);
     const [autorizado, setAutorizado] = useState(false);
 
-    // E-mail do dono da OdevTech (Substitua pelo SEU e-mail real do Google/Firebase)
     const SUPER_ADMIN_EMAIL = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
 
     useEffect(() => {
         const verificarPermissoes = async (user) => {
-            // 1. Se não estiver logado, rua!
             if (!user) {
                 setAutorizado(false);
                 setCarregando(false);
                 return;
             }
 
-            // 2. É o Super Admin (OdevTech)? Passe livre para qualquer loja!
-            if (user.email === SUPER_ADMIN_EMAIL) {
-                console.log("Acesso concedido: Super Admin");
+            // 2. Super Admin via Custom Claim (método principal)
+            try {
+                const tokenResult = await user.getIdTokenResult(true);
+                if (tokenResult.claims.superAdmin === true) {
+                    console.log("Acesso concedido: Super Admin (claim)");
+                    setAutorizado(true);
+                    setCarregando(false);
+                    return;
+                }
+            } catch (_) {}
+
+            // 2b. Fallback temporário: VITE_SUPER_ADMIN_EMAIL (deprecated)
+            if (SUPER_ADMIN_EMAIL && user.email === SUPER_ADMIN_EMAIL) {
+                console.log("Acesso concedido: Super Admin (fallback email)");
                 setAutorizado(true);
                 setCarregando(false);
                 return;

@@ -8,6 +8,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../../firebase";
+import { escapeHtml } from "../../../utils/sanitize";
 import { Clock, ChefHat, CheckCircle, Package } from "lucide-react";
 import { usePedidos } from "./hooks/usePedidos";
 import { useEmissaoFiscal } from "./hooks/useEmissaoFiscal";
@@ -152,25 +153,28 @@ export default function AbaKanban({ nomeDaLoja, clientesCadastrados = [] }) {
       0,
     );
 
+    const eh = escapeHtml;
+
     const itensText = pedido.itens
       .map((item) => {
         const q = item.quantidade || item.qtd_total || 1;
         const total = (item.preco || 0) * q;
-        const line = padDot(`${q}x ${item.nome}`, fmt(total));
+        const line = padDot(`${q}x ${eh(item.nome)}`, fmt(total));
 
         const subs =
           item.isKit && item.subitensSelecionados?.length > 0
             ? item.subitensSelecionados
-                .map((sub) => `  ${sub.quantidade * q}x ${sub.nome}`)
+                .map((sub) => `  ${sub.quantidade * q}x ${eh(sub.nome)}`)
                 .join("\n")
             : "";
         return subs ? `${line}\n${subs}` : line;
       })
       .join("\n");
 
+    const endTexto = (v) => eh(v || "");
     const enderecoText =
       pedido.tipoEntrega === "entrega" && pedido.enderecoEntrega
-        ? `${pedido.enderecoEntrega.logradouro || ""}, ${pedido.enderecoEntrega.numero || ""}${pedido.enderecoEntrega.complemento ? " - " + pedido.enderecoEntrega.complemento : ""}\n${pedido.enderecoEntrega.bairro || ""}, ${pedido.enderecoEntrega.cidade || ""} - ${pedido.enderecoEntrega.uf || ""}\nCEP: ${pedido.enderecoEntrega.cep || ""}`
+        ? `${endTexto(pedido.enderecoEntrega.logradouro)}, ${endTexto(pedido.enderecoEntrega.numero)}${pedido.enderecoEntrega.complemento ? " - " + endTexto(pedido.enderecoEntrega.complemento) : ""}\n${endTexto(pedido.enderecoEntrega.bairro)}, ${endTexto(pedido.enderecoEntrega.cidade)} - ${endTexto(pedido.enderecoEntrega.uf)}\nCEP: ${endTexto(pedido.enderecoEntrega.cep)}`
         : "Retirada no local";
 
     const tipoEntregaLabel = pedido.tipoEntrega === "entrega" ? "DELIVERY" : "RETIRADA";
@@ -205,11 +209,11 @@ export default function AbaKanban({ nomeDaLoja, clientesCadastrados = [] }) {
   .pre { white-space:pre; }
   .footer { text-align:center; margin-top:6px; }
 </style></head><body>
-<div class="c nome-loja">${configLoja?.nomeExibicao || nomeDaLoja || "Loja"}</div>
-<div class="c info">Pedido #${(pedido.id || "").slice(0, 8)}</div>
-<div class="c info">${dataPedido}</div>
-${dataEntrega ? `<div class="c info">Entrega: ${dataEntrega}</div>` : ""}
-<div class="c info" style="font-weight:bold">${tipoEntregaLabel}</div>
+<div class="c nome-loja">${eh(configLoja?.nomeExibicao || nomeDaLoja || "Loja")}</div>
+<div class="c info">Pedido #${eh((pedido.id || "").slice(0, 8))}</div>
+<div class="c info">${eh(dataPedido)}</div>
+${dataEntrega ? `<div class="c info">Entrega: ${eh(dataEntrega)}</div>` : ""}
+<div class="c info" style="font-weight:bold">${eh(tipoEntregaLabel)}</div>
 <div class="sep">${SEP}</div>
 <div class="pre">${itensText}</div>
 <div class="sep">${SEP}</div>
@@ -218,12 +222,12 @@ ${freteText ? `<div class="pre">${freteText}</div>` : ""}
 <div class="pre" style="font-weight:bold">${padDot("TOTAL", fmt(pedido.valorTotal))}</div>
 ${sinalText}
 <div class="sep">${SEP2}</div>
-<div class="info"><b>Cliente:</b> ${pedido.cliente || "—"}</div>
-${pedido.telefone ? `<div class="info"><b>Tel:</b> ${pedido.telefone}</div>` : ""}
-${pedido.cpf ? `<div class="info"><b>CPF:</b> ${pedido.cpf}</div>` : ""}
-<div class="info"><b>Pagamento:</b> ${formaPgto}</div>
+<div class="info"><b>Cliente:</b> ${eh(pedido.cliente || "—")}</div>
+${pedido.telefone ? `<div class="info"><b>Tel:</b> ${eh(pedido.telefone)}</div>` : ""}
+${pedido.cpf ? `<div class="info"><b>CPF:</b> ${eh(pedido.cpf)}</div>` : ""}
+<div class="info"><b>Pagamento:</b> ${eh(formaPgto)}</div>
 <div class="info"><b>Endereco:</b></div>
-<div class="info" style="padding-left:4px">${enderecoText}</div>
+<div class="info" style="padding-left:4px">${eh(enderecoText)}</div>
 <div class="sep">${SEP2}</div>
 <div class="footer">Obrigado pela preferencia!</div>
 <script>window.onload=function(){window.print();window.close()};</script>

@@ -9,13 +9,11 @@ export const focusNFeService = {
   // ==========================================
   async emitirNFCe(nomeDaLoja, payload) {
     try {
-      console.log("📤 Enviando NFCe:", { lojaId: nomeDaLoja, payload });
       const emitirNFCeFn = httpsCallable(functions, "emitirNFCe");
       const result = await emitirNFCeFn({
         lojaId: nomeDaLoja,
         payloadNFCe: payload,
       });
-      console.log("✅ Sucesso emitirNFCe:", result.data);
       return result.data;
     } catch (error) {
       console.error("❌ Erro ao emitir NFCe:", error);
@@ -50,13 +48,11 @@ export const focusNFeService = {
   // ==========================================
   async emitirNFe(nomeDaLoja, payload) {
     try {
-      // console.log("📤 Enviando NFe:", { lojaId: nomeDaLoja, payload });
       const emitirNFeFn = httpsCallable(functions, "emitirNFe");
       const result = await emitirNFeFn({
         lojaId: nomeDaLoja,
         payloadNFe: payload,
       });
-      console.log("✅ Sucesso emitirNFe:", result.data);
       return result.data;
     } catch (error) {
       console.error("❌ Erro ao emitir NFe:", error);

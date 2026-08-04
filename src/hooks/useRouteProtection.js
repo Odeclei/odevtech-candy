@@ -17,8 +17,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
-const SUPER_ADMIN_EMAIL =
-    import.meta.env.VITE_SUPER_ADMIN_EMAIL || "admin@example.com";
+const SUPER_ADMIN_EMAIL = import.meta.env.VITE_SUPER_ADMIN_EMAIL || "";
 const TIMEOUT_VERIFICACAO = 10000; // 10 segundos
 
 export const useRouteProtection = () => {
@@ -55,9 +54,21 @@ export const useRouteProtection = () => {
                     return;
                 }
 
-                // 2. É o Super Admin? Passe livre para qualquer loja!
-                if (user.email === SUPER_ADMIN_EMAIL) {
-                    console.log("✅ Acesso concedido: Super Admin");
+                // 2. É o Super Admin (Custom Claim)? Passe livre para qualquer loja!
+                try {
+                    const tokenResult = await user.getIdTokenResult(true);
+                    if (tokenResult.claims.superAdmin === true) {
+                        console.log("✅ Acesso concedido: Super Admin");
+                        setAutorizado(true);
+                        setCarregando(false);
+                        clearTimeout(timeoutId);
+                        return;
+                    }
+                } catch (_) {}
+
+                // 2b. Fallback temporário: VITE_SUPER_ADMIN_EMAIL (deprecated)
+                if (SUPER_ADMIN_EMAIL && user.email === SUPER_ADMIN_EMAIL) {
+                    console.log("✅ Acesso concedido: Super Admin (fallback email)");
                     setAutorizado(true);
                     setCarregando(false);
                     clearTimeout(timeoutId);

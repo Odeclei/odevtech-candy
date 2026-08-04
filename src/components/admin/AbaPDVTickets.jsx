@@ -22,6 +22,7 @@ import {
 import { db } from "../../firebase";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
+import { escapeHtml } from "../../utils/sanitize";
 
 export default function AbaPDVTickets({ nomeDaLoja }) {
     const [eventos, setEventos] = useState([]);
@@ -117,6 +118,7 @@ export default function AbaPDVTickets({ nomeDaLoja }) {
     // ==========================================
     const imprimirMultiplosTickets = async (listaTickets, tipoLeitura) => {
         if (listaTickets.length === 0) return;
+        const eh = escapeHtml;
 
         try {
             const ticketsPreparados = await Promise.all(
@@ -176,7 +178,7 @@ export default function AbaPDVTickets({ nomeDaLoja }) {
                     .map(
                         (item) => `
                             <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0;">
-                                <span>${item.quantidade}x ${item.nome}</span>
+                                <span>${item.quantidade}x ${eh(item.nome)}</span>
                             </div>
                         `,
                     )
@@ -206,16 +208,16 @@ export default function AbaPDVTickets({ nomeDaLoja }) {
 
                 htmlConteudo += `
                     <div style="page-break-after: always; padding: 2mm 3mm; font-family: 'Courier New', monospace; width: 58mm; margin: 0 auto; font-size: 11px;">
-                        <div style="text-align: center; font-weight: bold; font-size: 14px;">${titulo}</div>
-                        <div style="text-align: center; font-size: 10px;">${evento}</div>
-                        ${cliente ? `<div style="text-align: center; font-size: 10px;">${cliente}</div>` : ""}
+                        <div style="text-align: center; font-weight: bold; font-size: 14px;">${eh(titulo)}</div>
+                        <div style="text-align: center; font-size: 10px;">${eh(evento)}</div>
+                        ${cliente ? `<div style="text-align: center; font-size: 10px;">${eh(cliente)}</div>` : ""}
                         <div style="border-top: 1px dashed #000; margin: 3px 0;"></div>
-                        <div style="font-size: 10px;"><span style="font-weight: bold;">Data:</span> ${data}</div>
+                        <div style="font-size: 10px;"><span style="font-weight: bold;">Data:</span> ${eh(data)}</div>
                         <div style="border-top: 1px dashed #000; margin: 3px 0;"></div>
                         <div style="text-align: center; font-weight: bold; font-size: 14px;">${itensHtml}</div>
                         ${codigoHtml}
                         <div style="text-align: center; font-size: 9px; margin-top: 6px; border-top: 1px dotted #ccc; padding-top: 4px;">
-                            Obrigado! ${nomeDaLoja}
+                            Obrigado! ${eh(nomeDaLoja)}
                         </div>
                         <div style="text-align: center; font-size: 7px; margin-top: 6px; border-top: 1px dotted #ccc; padding-top: 4px;">
                             Desenvolvido por OdevTech.
@@ -611,7 +613,13 @@ export default function AbaPDVTickets({ nomeDaLoja }) {
                 <div className="lg:col-span-2 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
                     <h3 className="font-bold text-slate-700 mb-3">Produtos</h3>
                     <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
-                        {produtos.map((prod) => (
+                        {produtos
+                            .sort((a, b) =>
+                                a.nome?.localeCompare(b.nome, "pt-BR", {
+                                    sensitivity: "base",
+                                }),
+                            )
+                            .map((prod) => (
                             <button
                                 key={prod.id}
                                 onClick={() => adicionarProduto(prod)}

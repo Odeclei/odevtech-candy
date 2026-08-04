@@ -1474,21 +1474,23 @@ function ProductImageCarousel({ imagens, alt }) {
 
     if (!imagens || imagens.length === 0)
         return (
-            <img
-                src="https://placehold.co/400?text=Sem+Foto"
-                alt="Sem Foto"
-                className="w-full h-full object-cover"
-            />
+            <div className="w-full h-full bg-white lg:transition-all lg:duration-500 lg:group-hover:scale-[1.35] lg:group-hover:-translate-y-6 lg:group-hover:shadow-2xl lg:rounded-[16px] lg:group-hover:shadow-black/20">
+                <img
+                    src="https://placehold.co/400?text=Sem+Foto"
+                    alt="Sem Foto"
+                    className="w-full h-full object-cover"
+                />
+            </div>
         );
 
     return (
-        <div className="relative w-full h-full overflow-hidden group">
+        <div className="relative w-full h-full overflow-hidden bg-white lg:transition-all lg:duration-500 lg:group-hover:scale-[1.35] lg:group-hover:-translate-y-6 lg:group-hover:shadow-2xl lg:rounded-[16px] lg:group-hover:shadow-black/20">
             {imagens.map((img, i) => (
                 <img
                     key={i}
                     src={img}
                     alt={alt}
-                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
+                    className={`absolute inset-0 w-full h-full lg:group-hover:object-contain object-cover transition-all duration-1000 ${
                         i === currentIndex ? "opacity-100" : "opacity-0"
                     }`}
                 />
@@ -2187,9 +2189,9 @@ function ProductCard({
     return (
         <div
             onClick={() => produto.isKit && onAbrirKit(produto)}
-            className="bg-white rounded-[16px] shadow-sm border border-slate-100 overflow-hidden group cursor-pointer hover:-translate-y-1 transition-transform duration-300 flex flex-col h-full relative"
+            className="bg-white rounded-[16px] shadow-sm border border-slate-100 group cursor-pointer hover:-translate-y-1 transition-transform duration-300 flex flex-col h-full relative lg:hover:z-10"
         >
-            <div className="relative w-full aspect-[4/3] bg-slate-50 overflow-hidden">
+            <div className="relative w-full aspect-[4/3] bg-slate-50 overflow-hidden lg:group-hover:overflow-visible lg:group-hover:z-20">
                 <ProductImageCarousel
                     imagens={
                         produto.imagens?.length > 0
@@ -2296,9 +2298,13 @@ function ProductGrid({
     return (
         <section className="px-4 md:px-12 mt-4 space-y-12">
             {categoriasFiltradas.map((cat) => {
-                const produtosDaCat = produtosFiltrados.filter(
-                    (p) => (p.categoria || "Outros") === cat,
-                );
+                const produtosDaCat = produtosFiltrados
+                    .filter((p) => (p.categoria || "Outros") === cat)
+                    .sort((a, b) =>
+                        a.nome?.localeCompare(b.nome, "pt-BR", {
+                            sensitivity: "base",
+                        }),
+                    );
                 return (
                     <div
                         key={cat}

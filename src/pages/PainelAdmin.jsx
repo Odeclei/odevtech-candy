@@ -27,6 +27,7 @@ import {
     Loader2,
     Calendar,
     QrCode,
+    Truck,
 } from "lucide-react";
 import {
     collection,
@@ -38,6 +39,7 @@ import {
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { db, auth } from "../firebase";
+import { escapeHtml } from "../utils/sanitize";
 
 // ==========================================
 // 1. LAZY LOADING DAS ABAS (PERFORMANCE)
@@ -59,6 +61,9 @@ const AbaEventos = lazy(() => import("../components/admin/AbaEventos"));
 const AbaPDVTickets = lazy(() => import("../components/admin/AbaPDVTickets"));
 const AbaLeitorTickets = lazy(
     () => import("../components/admin/AbaLeitorTickets"),
+);
+const AbaLancamentoDelivery = lazy(
+    () => import("../components/admin/AbaLancamentoDelivery"),
 );
 
 const paletaTemasAdmin = {
@@ -159,6 +164,7 @@ export default function PainelAdmin() {
     const imprimirTicketRapido = useCallback(
         (dados) => {
             const janelaImpressao = window.open("", "", "width=300,height=600");
+            const eh = escapeHtml;
             let htmlCupom = `
             <html><head><title>Ticket</title>
             <style>
@@ -168,17 +174,17 @@ export default function PainelAdmin() {
             </head><body>
             <div class="center bold" style="font-size: 18px; margin-bottom: 5px;">NOVO PEDIDO</div>
             <div class="center">${configLoja?.nomeExibicao || nomeDaLoja}</div><hr/>
-            <div style="font-size: 16px; margin-bottom: 10px;"><b>Cliente:</b> ${dados.cliente}</div>
+            <div style="font-size: 16px; margin-bottom: 10px;"><b>Cliente:</b> ${eh(dados.cliente)}</div>
         `;
 
             if (dados.endereco)
-                htmlCupom += `<div style="margin-bottom: 10px;"><b>Endereço:</b> ${dados.endereco}</div>`;
+                htmlCupom += `<div style="margin-bottom: 10px;"><b>Endereço:</b> ${eh(dados.endereco)}</div>`;
             if (dados.telefone)
-                htmlCupom += `<div style="margin-bottom: 10px;"><b>WhatsApp:</b> ${dados.telefone}</div>`;
+                htmlCupom += `<div style="margin-bottom: 10px;"><b>WhatsApp:</b> ${eh(dados.telefone)}</div>`;
 
             htmlCupom += `<hr/><div class="bold">ITENS DO PEDIDO:</div><div style="margin-top: 5px;">`;
             (dados.itens || []).forEach((item) => {
-                htmlCupom += `<div style="margin-bottom: 4px;">${item.quantidade || item.qtd_total}x ${item.nome}</div>`;
+                htmlCupom += `<div style="margin-bottom: 4px;">${item.quantidade || item.qtd_total}x ${eh(item.nome)}</div>`;
             });
             htmlCupom += `</div><hr/><div class="center" style="margin-top: 15px;">Emitido em: ${new Date().toLocaleString("pt-BR")}</div></body></html>`;
 
@@ -378,6 +384,12 @@ export default function PainelAdmin() {
                 icon: <ShoppingBag size={20} />,
                 label: "Cardápio / Menu",
             });
+            if (configLoja?.nicho !== "bar_restaurante")
+                itensComuns.push({
+                    id: "lancamento",
+                    icon: <Truck size={20} />,
+                    label: "Lançar Pedido (Delivery)",
+                });
             if (modulosAtivos.includes("ficha_tecnica"))
                 itensComuns.push({
                     id: "estoque",
@@ -612,6 +624,8 @@ export default function PainelAdmin() {
                                     "Gestão Operacional (KDS)"}
                                 {abaAtiva === "cardapio" &&
                                     "Gestão de Cardápio"}
+                                {abaAtiva === "lancamento" &&
+                                    "Lançamento de Pedido (Delivery)"}
                                 {abaAtiva === "estoque" &&
                                     "Controle de Estoque e Compras"}
                                 {abaAtiva === "clientes" &&
@@ -673,6 +687,12 @@ export default function PainelAdmin() {
                                 formatarDinheiro={formatarDinheiro}
                             />
                         )}
+                        {abaAtiva === "lancamento" && (
+                            <AbaLancamentoDelivery
+                                nomeDaLoja={nomeDaLoja}
+                                clientes={clientes}
+                            />
+                        )}
                         {abaAtiva === "estoque" && (
                             <AbaEstoque nomeDaLoja={nomeDaLoja} />
                         )}
@@ -701,6 +721,7 @@ export default function PainelAdmin() {
                             <AbaConfiguracoes
                                 nomeDaLoja={nomeDaLoja}
                                 membrosEquipe={membrosEquipe}
+                                produtos={produtos}
                             />
                         )}
                         {abaAtiva === "eventos" && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   doc,
   getDoc,
@@ -30,10 +30,14 @@ import {
   Truck,
   MapPin,
   Plus,
+  ShoppingBag,
+  ChevronUp,
+  ChevronDown,
+  Layers,
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
 
-export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
+export default function AbaConfig({ nomeDaLoja, membrosEquipe, produtos }) {
   const [abaAtual, setAbaAtual] = useState("geral");
   const [config, setConfig] = useState({
     logo: "",
@@ -60,6 +64,8 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
     bairro: "",
     uf: "",
     modulos: [], // Controlado pelo SuperAdmin
+    // Ordenação das categorias do catálogo
+    ordemCategorias: [],
     // ============================================================
     // ✅ NOVO CAMPO: Mensagem Complementar Obrigatória (NF-e/NFC-e)
     // ============================================================
@@ -224,6 +230,35 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
 
   const isModuloFiscalAtivo = (config.modulos || []).includes("fiscal");
 
+  // ==========================================
+  // ORDENAÇÃO DAS CATEGORIAS DO CATÁLOGO
+  // ==========================================
+  const listaCategorias = useMemo(() => {
+    const lista = [
+      ...new Set((produtos || []).map((p) => p.categoria || "Geral")),
+    ];
+    const ordem = config.ordemCategorias || [];
+    if (ordem.length === 0) return lista.sort((a, b) => a.localeCompare(b));
+    return lista.sort((a, b) => {
+      const ia = ordem.indexOf(a);
+      const ib = ordem.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }, [produtos, config.ordemCategorias]);
+
+  const moverCategoria = (cat, direcao) => {
+    const cats = listaCategorias;
+    const idx = cats.indexOf(cat);
+    const novoIdx = idx + direcao;
+    if (novoIdx < 0 || novoIdx >= cats.length) return;
+    const nova = [...cats];
+    [nova[idx], nova[novoIdx]] = [nova[novoIdx], nova[idx]];
+    setConfig({ ...config, ordemCategorias: nova });
+  };
+
   return (
     <div className="max-w-4xl animate-in fade-in duration-300 pb-20">
       {/* NAVEGAÇÃO POR ABAS */}
@@ -279,6 +314,16 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
           <Truck size={18} className="inline mr-2" /> Entrega
         </button>
         <button
+          onClick={() => setAbaAtual("catalogo")}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
+            abaAtual === "catalogo"
+              ? "border-slate-900 text-slate-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <ShoppingBag size={18} className="inline mr-2" /> Catálogo
+        </button>
+        <button
           onClick={() => setAbaAtual("equipe")}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
             abaAtual === "equipe"
@@ -291,9 +336,14 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
       </div>
 
       {/* FORMULÁRIO PRINCIPAL (Apanha as primeiras abas de configuração da loja) */}
-      {["geral", "recebimento", "markup", "fiscal", "entrega"].includes(
-        abaAtual,
-      ) && (
+      {[
+        "geral",
+        "recebimento",
+        "markup",
+        "fiscal",
+        "entrega",
+        "catalogo",
+      ].includes(abaAtual) && (
         <form onSubmit={salvarConfiguracoes} className="space-y-8">
           {/* ABA GERAL */}
           {abaAtual === "geral" && (
@@ -876,6 +926,64 @@ export default function AbaConfig({ nomeDaLoja, membrosEquipe }) {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ABA CATÁLOGO */}
+          {abaAtual === "catalogo" && (
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in">
+              <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                <Layers className="text-emerald-500" /> Ordenação das Categorias
+                do Catálogo
+              </h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Arraste o quê virá primeiro na página do catálogo. Use as setas
+                para mover cada categoria. A alteração é salva junto com as
+                demais configurações.
+              </p>
+
+              {listaCategorias.length === 0 ? (
+                <div className="text-center p-10 border border-dashed border-slate-200 rounded-2xl text-slate-400">
+                  <Layers size={32} className="mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma categoria encontrada nos produtos.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {listaCategorias.map((cat, idx) => (
+                    <div
+                      key={cat}
+                      className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-7 h-7 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center font-black text-sm">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-700">
+                          {cat}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => moverCategoria(cat, -1)}
+                          disabled={idx === 0}
+                          className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition"
+                        >
+                          <ChevronUp size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moverCategoria(cat, 1)}
+                          disabled={idx === listaCategorias.length - 1}
+                          className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition"
+                        >
+                          <ChevronDown size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

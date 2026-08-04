@@ -490,6 +490,11 @@ export default function AbaGarcom({ nomeDaLoja }) {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
                 {produtosMenu
                     .filter((p) => (p.categoria || "Geral") === categoriaAtiva)
+                    .sort((a, b) =>
+                        a.nome?.localeCompare(b.nome, "pt-BR", {
+                            sensitivity: "base",
+                        }),
+                    )
                     .map((prod) => {
                         const isKit = prod.isKit;
                         const qtdNoCarrinho = getQuantidadeNoCarrinho(prod.id);
